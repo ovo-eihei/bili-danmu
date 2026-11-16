@@ -1,5 +1,5 @@
 {
-  "name": "bili-danmu",
+  "name": "@ovo-eihei/bili-danmu",
   "type": "module",
   "version": "0.1.0",
   "description": "哔哩哔哩直播弹幕交互式命令行工具",

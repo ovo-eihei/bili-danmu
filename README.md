@@ -4,7 +4,11 @@
 
 ## 安装
 
-尚未发布到 npm，从仓库克隆后本地构建：
+```bash
+npm install -g @ovo-eihei/bili-danmu
+```
+
+从源码开发：
 
 ```bash
 git clone https://github.com/ovo-eihei/bili-danmu.git
