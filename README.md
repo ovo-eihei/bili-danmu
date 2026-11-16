@@ -31,7 +31,6 @@ bili-danmu
 
 · 欢迎使用 bili-danmu
 · /connect [房间号] 连接直播间 · /login 登录 · /help 查看全部命令
-· Tab 补全命令与历史房间号
 · 连接直播间 22603245 · 永雏塔菲
 · 已连接
 [雏草姬|22]彩绫恋音: 晚上好
@@ -41,12 +40,13 @@ bili-danmu
 [雏草姬|35]小雏草 [￥30 塔菲今天也好可爱]
 ❯ 输入弹幕，Enter 发送
 ● 已连接 22603245 永雏塔菲 · 已登录 立青
-Enter 发送 · Tab 补全 · /help 命令 · /close 断开
+Enter 发送 · / 命令建议 · /help
+Ctrl+O 互动消息[显示/隐藏]
 ```
 
 1. `/login` 先选登录方式：粘贴 Cookie（输入以 `*` 显示）、输入 Cookie 文件路径，或从本机浏览器读取。选择浏览器后列出已安装的 Chrome/Edge/Brave/Firefox；Firefox 直接读、不用关，Chromium 系运行时会先确认再关闭。新版 Chrome/Edge 的 v20 加密通常读不到，失败后请改用粘贴 Cookie。`/login ./cookie.txt`、`/login chrome` 这类快捷写法仍可用
 2. `/connect 22603245` 连接永雏塔菲的直播间；不带房间号时直接列出连接历史
-3. 直接输入文字回车即发送弹幕；`/close` 断开；`Ctrl+O` 显示/隐藏进场、关注等互动消息
+3. 直接输入文字回车即发送弹幕；`/close` 断开；`Ctrl+O` 切换进场、关注等互动消息的显示状态，底部常驻状态行会高亮当前挡位
 
 事件输出参考 [mouse-danmu](https://github.com/ovo-liqing/mouse-danmu) 的样式：粉丝团显示为 `[名称|等级]` 并按等级着色，用户名按大航海等级着色，礼物、醒目留言按金额分档着色。用户名可点击打开 B 站个人空间，表情弹幕可点击打开表情图片（依赖终端支持 OSC 8 超链接，Windows Terminal、iTerm2 等可用；不支持的终端显示为普通文本）。
 
@@ -61,10 +61,11 @@ Enter 发送 · Tab 补全 · /help 命令 · /close 断开
 | `/status` | 查看连接、登录与历史状态 |
 | `/login [来源]` | 登录；省略时选择粘贴 Cookie 或从已安装的浏览器读取，也可给浏览器名、Cookie 文件路径 |
 | `/logout` | 清除本地保存的登录状态 |
+| `/demo` | 输出各类示例消息，查看粉丝牌、大航海、礼物、留言与互动配色 |
 | `/help` | 命令列表 |
 | `/quit` | 退出（也可 Ctrl+C） |
 
-`Ctrl+O` 显示/隐藏进场、关注、分享等互动消息（默认隐藏）。
+`Ctrl+O` 切换进场、关注、分享等互动消息；底部常驻行显示 `互动消息[显示/隐藏]` 并高亮当前挡位（默认隐藏）。`/demo` 可随时输出一组示例消息查看各类配色。
 
 已连接时输入框提示「输入弹幕，Enter 发送」；未登录时发送会提示先登录。发送失败会把内容留在输入框里。
 
@@ -146,7 +147,7 @@ src/
   cli/
     main.ts         bin 入口与子命令
     commands.ts     交互命令解析
-    completions.ts  Tab 补全（命令、房间号、浏览器名）
+    completions.ts  Tab 补全（命令、房间号）
     browser-cookies.ts  从本机浏览器读取登录 Cookie
     store.ts        登录与连接历史持久化
     tui/            Ink 界面组件（App、EventLine、format）

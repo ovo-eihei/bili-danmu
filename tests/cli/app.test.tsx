@@ -109,20 +109,46 @@ describe('App', () => {
     unmount()
   })
 
-  test('Ctrl+O 切换互动消息显示，底部常驻状态同步变化', async () => {
-    const { frames, lastFrame, stdin, unmount } = render(<App store={createStore()} />)
+  test('Ctrl+O 切换互动消息显示，底部保留显示/隐藏两档', async () => {
+    const { lastFrame, stdin, unmount } = render(<App store={createStore()} />)
 
-    expect(lastFrame()).toContain('显示互动消息')
-
-    stdin.write('\u000F')
-    await delay()
-    expect(lastFrame()).toContain('隐藏互动消息')
-    expect(frames.join('')).not.toContain('互动消息已显示')
+    expect(lastFrame()).toContain('互动消息[显示/隐藏]')
 
     stdin.write('\u000F')
     await delay()
-    expect(lastFrame()).toContain('显示互动消息')
-    expect(frames.join('')).not.toContain('互动消息已隐藏')
+    expect(lastFrame()).toContain('互动消息[显示/隐藏]')
+
+    stdin.write('\u000F')
+    await delay()
+    expect(lastFrame()).toContain('互动消息[显示/隐藏]')
+
+    unmount()
+  })
+
+  test('/demo 输出各类示例消息，互动示例跟随显示状态', async () => {
+    const { frames, stdin, unmount } = render(<App store={createStore()} />)
+
+    stdin.write('/demo')
+    await delay(20)
+    stdin.write('\r')
+    await delay()
+
+    const hiddenOutput = frames.join('')
+    expect(hiddenOutput).toContain('示例消息：粉丝牌、大航海、礼物、醒目留言')
+    expect(hiddenOutput).toContain('低级粉丝牌与普通用户名')
+    expect(hiddenOutput).toContain('[小心心] × 1')
+    expect(hiddenOutput).toContain('30 元醒目留言')
+    expect(hiddenOutput).not.toContain('[进入直播间]')
+    expect(hiddenOutput).toContain('互动消息当前为隐藏')
+
+    stdin.write('\u000F')
+    await delay()
+    stdin.write('/demo')
+    await delay(20)
+    stdin.write('\r')
+    await delay()
+
+    expect(frames.join('')).toContain('[进入直播间]')
 
     unmount()
   })

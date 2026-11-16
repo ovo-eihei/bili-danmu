@@ -16,6 +16,7 @@ const COMMANDS: { name: string; summary: string }[] = [
   { name: 'status', summary: '连接与登录状态' },
   { name: 'login', summary: '登录账号' },
   { name: 'logout', summary: '清除本地登录状态' },
+  { name: 'demo', summary: '示例消息与配色' },
   { name: 'help', summary: '命令列表' },
   { name: 'quit', summary: '退出' },
 ]

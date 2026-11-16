@@ -9,7 +9,7 @@ import { COMMAND_HELP, parseCommand } from '../commands.js'
 import { suggest } from '../completions.js'
 import type { Suggestion } from '../completions.js'
 import { parseEvent } from '../../core/events.js'
-import type { LiveEvent } from '../../core/events.js'
+import type { LiveEvent, UserInfo } from '../../core/events.js'
 import { validateCookie } from '../../core/login.js'
 import type { LoginUser } from '../../core/login.js'
 import { getRoomInfo, resolveRoomId } from '../../core/room.js'
@@ -365,6 +365,25 @@ export function App({ store }: { store: Store }) {
     setMode('history')
   }
 
+  const showDemo = (): void => {
+    const showInteractMessages = showInteractRef.current
+    append({
+      kind: 'system',
+      text: showInteractMessages
+        ? '示例消息：粉丝牌、大航海、礼物、醒目留言、互动'
+        : '示例消息：粉丝牌、大航海、礼物、醒目留言',
+    })
+    for (const event of demoEvents(showInteractMessages)) {
+      append({ kind: 'event', event })
+    }
+    if (!showInteractMessages) {
+      append({
+        kind: 'system',
+        text: '互动消息当前为隐藏；按 Ctrl+O 切到显示后再执行 /demo',
+      })
+    }
+  }
+
   const showStatus = (): void => {
     append({ kind: 'system', text: `登录: ${self ? `${self.name} (@${self.uid})` : '未登录'}` })
     append({
@@ -455,6 +474,9 @@ export function App({ store }: { store: Store }) {
         for (const line of COMMAND_HELP) {
           append({ kind: 'system', text: line })
         }
+        break
+      case 'demo':
+        showDemo()
         break
       case 'quit':
         quit()
@@ -722,10 +744,23 @@ export function App({ store }: { store: Store }) {
       <Box height={1}>
         <Text wrap="truncate-end">
           <Text color={UI_COLOR.hotkey} bold>Ctrl+O</Text>
-          <Text color={showInteract ? UI_COLOR.success : UI_COLOR.dim}>
-            {showInteract ? ' 隐藏互动消息' : ' 显示互动消息'}
+          <Text dimColor> 互动消息[</Text>
+          <Text
+            color={showInteract ? UI_COLOR.success : UI_COLOR.dim}
+            bold={showInteract}
+            inverse={showInteract}
+          >
+            显示
           </Text>
-          <Text dimColor> · /help 查看全部命令</Text>
+          <Text dimColor>/</Text>
+          <Text
+            color={showInteract ? UI_COLOR.dim : UI_COLOR.success}
+            bold={!showInteract}
+            inverse={!showInteract}
+          >
+            隐藏
+          </Text>
+          <Text dimColor>]</Text>
         </Text>
       </Box>
     </Box>
@@ -741,6 +776,69 @@ function LogLine({ entry, selfUid }: { entry: LogEntry; selfUid?: string }) {
       · {entry.text}
     </Text>
   )
+}
+
+function demoEvents(includeInteract: boolean): LiveEvent[] {
+  const user = (name: string, guardLevel: number, medalLevel: number): UserInfo => ({
+    uid: '',
+    name,
+    guardLevel,
+    fansMedal: { name: '雏草姬', level: medalLevel },
+  })
+  const gifts: LiveEvent[] = [
+    { price: 0.1, name: '小心心', num: 1 },
+    { price: 5, name: '辣条', num: 10 },
+    { price: 10, name: '牛哇', num: 1 },
+    { price: 50, name: '打call', num: 1 },
+    { price: 100, name: '火箭', num: 1 },
+  ].map(({ price, name, num }) => ({
+    type: 'gift' as const,
+    user: user('送礼观众', 0, 8),
+    giftId: 0,
+    giftName: name,
+    num,
+    price,
+    coinType: 'gold',
+  }))
+  const superChats: LiveEvent[] = [30, 100, 500, 1000, 2000].map((price) => ({
+    type: 'superchat' as const,
+    user: user('醒目留言观众', 0, 15),
+    id: price,
+    body: `${price} 元醒目留言`,
+    price,
+    time: 60,
+  }))
+
+  const events: LiveEvent[] = [
+    { type: 'danmu', user: user('普通观众', 0, 3), body: '低级粉丝牌与普通用户名' },
+    { type: 'danmu', user: user('老粉', 0, 19), body: '19 级粉丝牌' },
+    { type: 'danmu', user: user('高阶粉丝牌', 0, 27), body: '27 级粉丝牌' },
+    { type: 'emoji', user: user('表情观众', 3, 12), body: '妙', uri: '' },
+    { type: 'danmu', user: user('舰长', 3, 12), body: '舰长用户名' },
+    { type: 'danmu', user: user('提督', 2, 18), body: '提督用户名' },
+    { type: 'danmu', user: user('总督', 1, 25), body: '总督用户名' },
+    ...gifts,
+    {
+      type: 'guard',
+      user: user('新舰长', 3, 10),
+      giftId: 0,
+      roleName: '舰长',
+      num: 1,
+      price: 198,
+      unit: '月',
+      level: 3,
+    },
+    ...superChats,
+  ]
+
+  if (includeInteract) {
+    events.push(
+      { type: 'interact', user: user('路过的观众', 0, 6), msgType: 1, msgTypeName: 'ENTER' },
+      { type: 'interact', user: user('新粉丝', 0, 0), msgType: 2, msgTypeName: 'FOLLOW' },
+      { type: 'interact', user: user('分享观众', 3, 9), msgType: 3, msgTypeName: 'SHARE' },
+    )
+  }
+  return events
 }
 
 function normalizeCookie(raw: string): string {
