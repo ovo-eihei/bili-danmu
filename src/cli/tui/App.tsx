@@ -125,7 +125,7 @@ export function App({ store }: { store: Store }) {
         text: `连接直播间 ${roomId}${info.owner ? ` · ${info.owner}` : ''}`,
       })
       if (info.liveStatus !== 1) {
-        append({ kind: 'system', tone: 'warn', text: '该直播间当前未开播，可能收不到弹幕' })
+        append({ kind: 'system', tone: 'warn', text: '该直播间当前未开播' })
       }
 
       const auth = await Auth.create(roomId, store.cookie)
