@@ -20,10 +20,8 @@ const COMMANDS: { name: string; summary: string }[] = [
   { name: 'quit', summary: '退出' },
 ]
 
-const LOGIN_SOURCES = ['chrome', 'edge', 'brave', 'firefox']
-
 /**
- * 斜杠命令建议：命令名，以及 /connect 的历史房间号、/login 的浏览器名。
+ * 斜杠命令建议：命令名，以及 /connect 的历史房间号。
  * 返回空数组表示不展示建议列表。
  */
 export function suggest(
@@ -62,16 +60,6 @@ export function suggest(
         value: `${head}${room.roomId} `,
         label: String(room.roomId),
         hint: room.owner ?? '历史直播间',
-      }))
-  }
-  if (command === 'login') {
-    const lower = prefix.toLowerCase()
-    return LOGIN_SOURCES.filter((name) => name.startsWith(lower))
-      .slice(0, limit)
-      .map((name) => ({
-        value: `${head}${name} `,
-        label: name,
-        hint: '从本机浏览器读取 Cookie',
       }))
   }
   return []

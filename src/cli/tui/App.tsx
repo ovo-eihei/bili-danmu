@@ -66,6 +66,7 @@ export function App({ store }: { store: Store }) {
   const [showInteract, setShowInteract] = useState(false)
   const [suggestionIndex, setSuggestionIndex] = useState(0)
   const [menuHidden, setMenuHidden] = useState(false)
+  const [inputEpoch, setInputEpoch] = useState(0)
 
   const logId = useRef(0)
   const clientRef = useRef<DanmuClient | null>(null)
@@ -246,7 +247,9 @@ export function App({ store }: { store: Store }) {
       }
       await completeLogin(cookie, '')
     } catch (error) {
-      setNotice({ tone: 'error', text: `登录失败: ${errorText(error)}` })
+      const text = `登录失败: ${errorText(error)}`
+      setNotice({ tone: 'error', text })
+      append({ kind: 'system', tone: 'error', text })
     }
   }
 
@@ -257,7 +260,9 @@ export function App({ store }: { store: Store }) {
       const result = await readBrowserBilibiliCookie(browser)
       await completeLogin(result.cookie, ` · 来自 ${label}（${result.profile}）`)
     } catch (error) {
-      setNotice({ tone: 'error', text: `登录失败: ${errorText(error)}` })
+      const text = `登录失败: ${errorText(error)}`
+      setNotice({ tone: 'error', text })
+      append({ kind: 'system', tone: 'error', text })
       setLoginStage(browserOptions.length > 0 ? 'browser' : 'method')
     }
   }
@@ -383,6 +388,8 @@ export function App({ store }: { store: Store }) {
 
   const applySuggestion = (item: Suggestion): void => {
     setInput(item.value)
+    // 重新挂载输入框，让光标落到填入内容的末尾
+    setInputEpoch((epoch) => epoch + 1)
     setSuggestionIndex(0)
     setMenuHidden(false)
     setNotice(null)
@@ -607,6 +614,9 @@ export function App({ store }: { store: Store }) {
             <Text color="yellow">
               关闭 {browserLabel(pendingBrowser)} 并继续？未保存的页面可能丢失。
             </Text>
+            <Text dimColor>
+              新版 Chrome/Edge 的 Cookie 可能因应用绑定加密读取失败，失败后请粘贴 Cookie。
+            </Text>
             <Box>
               <Text>关闭后继续 </Text>
               <ConfirmInput
@@ -650,6 +660,7 @@ export function App({ store }: { store: Store }) {
         <Box>
           <Text color={connState === 'connected' ? 'green' : 'gray'}>❯ </Text>
           <TextInput
+            key={`chat-${inputEpoch}`}
             value={input}
             onChange={handleChatChange}
             onSubmit={handleSubmit}

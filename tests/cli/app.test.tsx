@@ -101,6 +101,10 @@ describe('App', () => {
     expect(lastFrame()).toContain('/connect')
     expect(lastFrame()).not.toContain('↑↓ 选择')
 
+    stdin.write('2')
+    await delay()
+    expect(lastFrame()).toContain('/connect 2')
+
     unmount()
   })
 

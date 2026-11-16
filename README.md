@@ -44,13 +44,13 @@ bili-danmu
 Enter 发送 · Tab 补全 · /help 命令 · /close 断开
 ```
 
-1. `/login` 先选登录方式：粘贴 Cookie（输入以 `*` 显示）、输入 Cookie 文件路径，或从本机浏览器读取。选择浏览器后列出已安装的 Chrome/Edge/Brave/Firefox；Chromium 系通过 CDP 读取，浏览器运行时会先确认再关闭，Firefox 直接读、不用关。`/login ./cookie.txt`、`/login chrome` 这类快捷写法仍可用
+1. `/login` 先选登录方式：粘贴 Cookie（输入以 `*` 显示）、输入 Cookie 文件路径，或从本机浏览器读取。选择浏览器后列出已安装的 Chrome/Edge/Brave/Firefox；Firefox 直接读、不用关，Chromium 系运行时会先确认再关闭。新版 Chrome/Edge 的 v20 加密通常读不到，失败后请改用粘贴 Cookie。`/login ./cookie.txt`、`/login chrome` 这类快捷写法仍可用
 2. `/connect 22603245` 连接永雏塔菲的直播间；不带房间号时直接列出连接历史
 3. 直接输入文字回车即发送弹幕；`/close` 断开；`Ctrl+O` 显示/隐藏进场、关注等互动消息
 
 事件输出参考 [mouse-danmu](https://github.com/ovo-liqing/mouse-danmu) 的样式：粉丝团显示为 `[名称|等级]` 并按等级着色，用户名按大航海等级着色，礼物、醒目留言按金额分档着色。用户名可点击打开 B 站个人空间，表情弹幕可点击打开表情图片（依赖终端支持 OSC 8 超链接，Windows Terminal、iTerm2 等可用；不支持的终端显示为普通文本）。
 
-输入 `/` 会在输入框下方列出命令建议：↑↓ 选择，Tab 或 Enter 填入（命令名、`/connect` 的历史房间号、`/login` 的浏览器名），Esc 收起。日志直接输出到终端原生滚动区，用终端自己的方式往上翻；调整窗口大小时只重绘底部输入区，历史不会被挤掉。自己发的弹幕不做本地回显，收到服务端回包后按账号 uid 匹配，整行绿色显示。
+输入 `/` 会在输入框下方列出命令建议：↑↓ 选择，Tab 或 Enter 填入（命令名、`/connect` 的历史房间号），填入后光标停在末尾，Esc 收起。日志直接输出到终端原生滚动区，用终端自己的方式往上翻；调整窗口大小时只重绘底部输入区，历史不会被挤掉。自己发的弹幕不做本地回显，收到服务端回包后按账号 uid 匹配，整行绿色显示。
 
 ## 命令
 
@@ -68,7 +68,7 @@ Enter 发送 · Tab 补全 · /help 命令 · /close 断开
 
 已连接时输入框提示「输入弹幕，Enter 发送」；未登录时发送会提示先登录。发送失败会把内容留在输入框里。
 
-读浏览器 Cookie 的方式：Chromium 系（Chrome/Edge/Brave）把当前配置的 Cookie 数据库和 `Local State` 复制到临时配置档，用无头浏览器打开后通过 CDP 让浏览器自行解密，因此支持 Chrome/Edge 127+ 的应用绑定加密（`v20`）。读取前必须先退出浏览器：界面会先询问，确认后关闭该浏览器的所有窗口（正常退出失败时会强制结束，未保存的页面可能丢失，重启后可恢复标签页）。临时配置档在读取完成后删除。Firefox 直接读 `cookies.sqlite`，运行时也能读。
+读浏览器 Cookie 的方式：Firefox 直接读 `cookies.sqlite`，运行时也能读。Chromium 系（Chrome/Edge/Brave）关闭后把 Cookie 数据库和 `Local State` 复制到临时配置档，用无头浏览器通过 CDP 解密，支持 `v10`/`v11`。Chrome/Edge 127+ 的 `v20` 应用绑定加密只能在原配置档内解密，而浏览器又禁止在默认配置档上开启远程调试，因此遇到 `v20` 会直接提示读取失败，请改用粘贴 Cookie。读取 Chromium 前必须先退出浏览器：界面会先询问，确认后关闭该浏览器的所有窗口（正常退出失败时会强制结束，未保存的页面可能丢失，重启后可恢复标签页）。
 
 ## 本地存储
 

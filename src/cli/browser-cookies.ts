@@ -300,7 +300,9 @@ function hasBilibiliLogin(dbPath: string): boolean {
 
 /**
  * Chromium 系：把 Cookie 数据库和 Local State 复制到临时配置档，
- * 用无头浏览器打开并通过 CDP 让浏览器自己解密（兼容 v10/v11 与 v20）。
+ * 用无头浏览器打开后通过 CDP 让浏览器自行解密。
+ * v20（应用绑定加密）只能由原配置档解密，而 Chrome/Edge 又禁止在默认配置档上开启远程调试，
+ * 因此遇到 v20 直接给出明确提示，不再无意义地启动。
  * 调用前必须先确认浏览器已退出。
  */
 async function readChromiumViaCdp(browser: ChromiumName): Promise<BrowserCookieResult> {
@@ -317,6 +319,12 @@ async function readChromiumViaCdp(browser: ChromiumName): Promise<BrowserCookieR
   }
 
   const profile = findChromiumProfile(root)
+  if (usesAppBoundEncryption(profile.dbPath)) {
+    throw new Error(
+      `${LABELS[browser]} 的 Cookie 使用 v20 应用绑定加密，无法复制到临时配置档解密，浏览器也不允许在默认配置档上开启调试。请粘贴 Cookie，或改用 Firefox。`,
+    )
+  }
+
   const tempDir = mkdtempSync(join(tmpdir(), 'bili-danmu-cdp-'))
   const cookieDir = join(tempDir, 'Default', 'Network')
   mkdirSync(cookieDir, { recursive: true })
@@ -361,7 +369,6 @@ async function readChromiumViaCdp(browser: ChromiumName): Promise<BrowserCookieR
   } finally {
     killTree(child)
     await waitForChildExit(child, 3000)
-    // 临时配置档里是 Cookie 数据库，尽量清掉；文件句柄未释放时重试几次
     for (let i = 0; i < 5; i++) {
       try {
         rmSync(tempDir, { recursive: true, force: true })
@@ -370,6 +377,24 @@ async function readChromiumViaCdp(browser: ChromiumName): Promise<BrowserCookieR
         await sleep(200)
       }
     }
+  }
+}
+
+function usesAppBoundEncryption(dbPath: string): boolean {
+  const { DatabaseSync } = requireSqlite()
+  const db = new DatabaseSync(dbPath, { readOnly: true })
+  try {
+    const placeholders = REQUIRED.map(() => '?').join(', ')
+    const rows = db
+      .prepare(
+        `SELECT hex(substr(encrypted_value, 1, 3)) AS prefix FROM cookies
+         WHERE name IN (${placeholders})
+           AND (host_key = 'bilibili.com' OR host_key LIKE '%.bilibili.com')`,
+      )
+      .all(...REQUIRED) as Array<{ prefix: string }>
+    return rows.some((row) => row.prefix.toLowerCase() === '763230')
+  } finally {
+    db.close()
   }
 }
 

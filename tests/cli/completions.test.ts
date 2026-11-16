@@ -32,10 +32,9 @@ describe('suggest', () => {
     expect(suggest('/connect 999', rooms)).toEqual([])
   })
 
-  it('补全 /login 的浏览器名', () => {
-    expect(suggest('/login fir', [])).toEqual([
-      { value: '/login firefox ', label: 'firefox', hint: '从本机浏览器读取 Cookie' },
-    ])
+  it('/login 不给浏览器建议，交给交互式流程', () => {
+    expect(suggest('/login ', [])).toEqual([])
+    expect(suggest('/login fir', [])).toEqual([])
   })
 
   it('带完整参数或非参数命令时不给建议', () => {
