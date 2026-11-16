@@ -1,5 +1,7 @@
 # bili-danmu
 
+[![npm version](https://img.shields.io/npm/v/@ovo-eihei/bili-danmu)](https://www.npmjs.com/package/@ovo-eihei/bili-danmu)
+
 哔哩哔哩直播弹幕的 TypeScript 实现，带一个交互式命令行界面：连接直播间、看弹幕、发弹幕，登录状态和连接历史都保存在本地。
 
 ## 安装
