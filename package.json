@@ -1,0 +1,68 @@
+{
+  "name": "bili-danmu",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "哔哩哔哩直播弹幕交互式命令行工具",
+  "author": "ovo-agentx <351813579+ovo-agentx@users.noreply.github.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/ovo-eihei/bili-danmu#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ovo-eihei/bili-danmu.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ovo-eihei/bili-danmu/issues"
+  },
+  "keywords": [
+    "bilibili",
+    "danmu",
+    "danmaku",
+    "live",
+    "cli",
+    "tui"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@12.11.2",
+  "bin": {
+    "bili-danmu": "./dist/cli.mjs"
+  },
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./cli": "./dist/cli.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "start": "node dist/cli.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "release": "bumpp",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "@inkjs/ui": "^2.0.0",
+    "commander": "^15.1.0",
+    "conf": "^16.0.0",
+    "ink": "^8.0.0",
+    "ink-text-input": "^6.0.0",
+    "picocolors": "^1.1.1",
+    "react": "^19.3.1",
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/ws": "^8.18.1",
+    "bumpp": "^12.3.0",
+    "ink-testing-library": "^4.0.0",
+    "tsdown": "^0.23.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
