@@ -2,7 +2,6 @@ import { fetchJson } from './http.js'
 
 export interface RoomInfo {
   roomId: number
-  title?: string
   owner?: string
   liveStatus: number
   online?: number
@@ -27,26 +26,9 @@ export async function resolveRoomId(input: string): Promise<number> {
   throw new Error(`无法解析房间号: ${input}`)
 }
 
-/** 拉取房间标题、主播名与开播状态，失败时尽量返回房间号本身。 */
-export async function getRoomInfo(roomId: number): Promise<RoomInfo> {
-  try {
-    const json = await fetchJson<Record<string, any>>(
-      `https://api.live.bilibili.com/xlive/web-room/v1/index/getInfoByRoom?room_id=${roomId}`,
-    )
-    const room = json?.data?.room_info
-    if (json?.code === 0 && room) {
-      return {
-        roomId: Number(room.room_id ?? roomId),
-        title: room.title,
-        owner: json.data?.anchor_info?.base_info?.uname,
-        liveStatus: Number(room.live_status ?? 0),
-        online: Number(room.online ?? 0),
-      }
-    }
-  } catch {
-    // 退回下面的基础接口
-  }
-
+async function fetchLiveInfo(
+  roomId: number,
+): Promise<Pick<RoomInfo, 'liveStatus' | 'online'> | undefined> {
   try {
     const json = await fetchJson<Record<string, any>>(
       `https://api.live.bilibili.com/room/v1/Room/get_info?room_id=${roomId}`,
@@ -54,15 +36,38 @@ export async function getRoomInfo(roomId: number): Promise<RoomInfo> {
     const data = json?.data
     if (json?.code === 0 && data) {
       return {
-        roomId: Number(data.room_id ?? roomId),
-        title: data.title,
         liveStatus: Number(data.live_status ?? 0),
         online: Number(data.online ?? 0),
       }
     }
   } catch {
-    // 拉不到就只显示房间号
+    // 拉不到就按未开播处理
   }
+  return undefined
+}
 
-  return { roomId, liveStatus: 0 }
+/** getInfoByRoom 匿名常被风控，主播名单独从这个接口取。 */
+async function fetchAnchorName(roomId: number): Promise<string | undefined> {
+  try {
+    const json = await fetchJson<Record<string, any>>(
+      `https://api.live.bilibili.com/live_user/v1/UserInfo/get_anchor_in_room?roomid=${roomId}`,
+    )
+    if (json?.code === 0) {
+      return json.data?.info?.uname
+    }
+  } catch {
+    // 没有主播名就只显示房间号
+  }
+  return undefined
+}
+
+/** 拉取主播名与开播状态，失败时尽量返回房间号本身。 */
+export async function getRoomInfo(roomId: number): Promise<RoomInfo> {
+  const [live, owner] = await Promise.all([fetchLiveInfo(roomId), fetchAnchorName(roomId)])
+  return {
+    roomId,
+    owner,
+    liveStatus: live?.liveStatus ?? 0,
+    online: live?.online,
+  }
 }

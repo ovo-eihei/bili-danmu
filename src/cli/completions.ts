@@ -64,7 +64,7 @@ export function suggest(
       .map((room) => ({
         value: `${head}${room.roomId} `,
         label: String(room.roomId),
-        hint: room.owner ?? room.title ?? '历史直播间',
+        hint: room.owner ?? '历史直播间',
       }))
   }
   if (command === 'login') {

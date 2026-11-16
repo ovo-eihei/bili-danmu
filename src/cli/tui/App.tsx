@@ -398,7 +398,7 @@ export function App({ store }: { store: Store }) {
       kind: 'system',
       text:
         connState === 'connected' && room
-          ? `连接: ${room.roomId}${room.owner ? ` · ${room.owner}` : ''}${room.title ? ` · ${room.title}` : ''}`
+          ? `连接: ${room.roomId}${room.owner ? ` · ${room.owner}` : ''}`
           : `连接: ${STATUS[connState].text}`,
     })
     append({ kind: 'system', text: `连接历史: ${store.rooms().length} 个直播间` })
@@ -570,7 +570,7 @@ export function App({ store }: { store: Store }) {
     ? `${oscLink(String(room.roomId), `https://live.bilibili.com/${room.roomId}`)}${room.owner ? ` ${room.owner}` : ''}`
     : ''
   const historyOptions = store.rooms().map((item) => ({
-    label: `${item.roomId} ${item.owner ?? item.title ?? ''} · ${item.visits} 次 · ${shortTime(item.lastConnectedAt)}`,
+    label: `${item.roomId}${item.owner ? ` ${item.owner}` : ''} · ${item.visits} 次 · ${shortTime(item.lastConnectedAt)}`,
     value: String(item.roomId),
   }))
   historyOptions.push({ label: '输入其他房间号…', value: '__manual__' })

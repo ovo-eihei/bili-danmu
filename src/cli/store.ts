@@ -4,7 +4,6 @@ import type { LoginUser } from '../core/login.js'
 
 export interface RoomRecord {
   roomId: number
-  title?: string
   owner?: string
   visits: number
   lastConnectedAt: string
@@ -67,12 +66,11 @@ export class Store {
     )
   }
 
-  recordRoom(room: { roomId: number; title?: string; owner?: string }): void {
+  recordRoom(room: { roomId: number; owner?: string }): void {
     const rooms = this.rooms()
     const existing = rooms.find((item) => item.roomId === room.roomId)
     const record: RoomRecord = {
       roomId: room.roomId,
-      title: room.title ?? existing?.title,
       owner: room.owner ?? existing?.owner,
       visits: (existing?.visits ?? 0) + 1,
       lastConnectedAt: new Date().toISOString(),

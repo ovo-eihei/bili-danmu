@@ -42,12 +42,12 @@ describe('Store', () => {
 
   test('同房间累积访问次数并排到最前', () => {
     const { store } = createStore()
-    store.recordRoom({ roomId: 1, title: '旧房间' })
-    store.recordRoom({ roomId: 2, title: '新房间' })
+    store.recordRoom({ roomId: 1, owner: '旧主播' })
+    store.recordRoom({ roomId: 2, owner: '新主播' })
     store.recordRoom({ roomId: 1 })
 
     const rooms = store.rooms()
-    expect(rooms[0]).toMatchObject({ roomId: 1, visits: 2, title: '旧房间' })
+    expect(rooms[0]).toMatchObject({ roomId: 1, visits: 2, owner: '旧主播' })
     expect(rooms[1]).toMatchObject({ roomId: 2, visits: 1 })
   })
 
