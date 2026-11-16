@@ -813,7 +813,12 @@ function demoEvents(includeInteract: boolean): LiveEvent[] {
     { type: 'danmu', user: user('普通观众', 0, 3), body: '低级粉丝牌与普通用户名' },
     { type: 'danmu', user: user('老粉', 0, 19), body: '19 级粉丝牌' },
     { type: 'danmu', user: user('高阶粉丝牌', 0, 27), body: '27 级粉丝牌' },
-    { type: 'emoji', user: user('表情观众', 3, 12), body: '妙', uri: '' },
+    {
+      type: 'emoji',
+      user: user('表情观众', 3, 12),
+      body: '妙',
+      uri: 'https://i0.hdslb.com/bfs/emote/093c1e2c490161aca397afc45573c877cdead616.png',
+    },
     { type: 'danmu', user: user('舰长', 3, 12), body: '舰长用户名' },
     { type: 'danmu', user: user('提督', 2, 18), body: '提督用户名' },
     { type: 'danmu', user: user('总督', 1, 25), body: '总督用户名' },

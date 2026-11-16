@@ -138,6 +138,9 @@ describe('App', () => {
     expect(hiddenOutput).toContain('低级粉丝牌与普通用户名')
     expect(hiddenOutput).toContain('[小心心] × 1')
     expect(hiddenOutput).toContain('30 元醒目留言')
+    expect(hiddenOutput).toContain(
+      'https://i0.hdslb.com/bfs/emote/093c1e2c490161aca397afc45573c877cdead616.png',
+    )
     expect(hiddenOutput).not.toContain('[进入直播间]')
     expect(hiddenOutput).toContain('互动消息当前为隐藏')
 
