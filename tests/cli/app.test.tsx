@@ -36,7 +36,7 @@ describe('App', () => {
 
     const output = frames.join('')
     expect(output).toContain('/connect [房间号]')
-    expect(output).toContain('/interact')
+    expect(output).toContain('Ctrl+O')
 
     unmount()
   })
@@ -104,8 +104,22 @@ describe('App', () => {
     unmount()
   })
 
-  test('PgUp 翻看历史弹幕，Esc 回到底部', async () => {
-    const { lastFrame, stdin, unmount } = render(<App store={createStore()} />)
+  test('Ctrl+O 切换互动消息显示', async () => {
+    const { frames, stdin, unmount } = render(<App store={createStore()} />)
+
+    stdin.write('\u000F')
+    await delay()
+    expect(frames.join('')).toContain('互动消息已显示')
+
+    stdin.write('\u000F')
+    await delay()
+    expect(frames.join('')).toContain('互动消息已隐藏')
+
+    unmount()
+  })
+
+  test('日志直接写入终端历史，不占用固定视口', async () => {
+    const { frames, stdin, unmount } = render(<App store={createStore()} />)
 
     for (let i = 0; i < 3; i++) {
       stdin.write('/help')
@@ -114,15 +128,9 @@ describe('App', () => {
       await delay()
     }
 
-    stdin.write('\u001B[5~')
-    await delay()
-    const scrolled = lastFrame() ?? ''
-    expect(scrolled).toContain('欢迎使用 bili-danmu')
-    expect(scrolled).toContain('历史 ')
-
-    stdin.write('\u001B')
-    await delay()
-    expect(lastFrame()).not.toContain('PgUp/PgDn 翻页')
+    const output = frames.join('')
+    expect(output).toContain('欢迎使用 bili-danmu')
+    expect(output).toContain('/connect [房间号]')
 
     unmount()
   })

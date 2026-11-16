@@ -1,7 +1,6 @@
 export interface SuggestionRoom {
   roomId: number
   owner?: string
-  title?: string
 }
 
 export interface Suggestion {
@@ -13,12 +12,10 @@ export interface Suggestion {
 
 const COMMANDS: { name: string; summary: string }[] = [
   { name: 'connect', summary: '连接直播间' },
-  { name: 'history', summary: '最近连接过的直播间' },
   { name: 'close', summary: '断开当前直播间' },
   { name: 'status', summary: '连接与登录状态' },
   { name: 'login', summary: '登录账号' },
   { name: 'logout', summary: '清除本地登录状态' },
-  { name: 'interact', summary: '显示/隐藏互动消息' },
   { name: 'help', summary: '命令列表' },
   { name: 'quit', summary: '退出' },
 ]

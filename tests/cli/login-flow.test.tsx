@@ -36,7 +36,7 @@ function createStore(): Store {
 }
 
 describe('登录流程', () => {
-  test('/login 列出检测到的浏览器，运行中先确认再关闭', async () => {
+  test('/login 先选登录方式，再选浏览器；运行中先确认再关闭', async () => {
     const { closeBrowser } = await import('../../src/cli/browser-cookies.js')
     const { lastFrame, stdin, unmount } = render(<App store={createStore()} />)
 
@@ -45,9 +45,16 @@ describe('登录流程', () => {
     stdin.write('\r')
     await delay()
 
+    expect(lastFrame()).toContain('粘贴 Cookie')
+    expect(lastFrame()).toContain('从浏览器读取 Cookie')
+    expect(lastFrame()).not.toContain('Chrome（读取 Cookie）')
+
+    stdin.write('\u001B[B')
+    await delay()
+    stdin.write('\r')
+    await delay()
     expect(lastFrame()).toContain('Chrome（读取 Cookie）')
     expect(lastFrame()).toContain('Firefox（读取 Cookie）')
-    expect(lastFrame()).toContain('粘贴 Cookie')
 
     stdin.write('\r')
     await delay()

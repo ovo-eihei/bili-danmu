@@ -24,7 +24,7 @@ describe('parseCommand', () => {
   test('其余命令与别名', () => {
     expect(parseCommand('/close')).toEqual({ type: 'close' })
     expect(parseCommand('/status')).toEqual({ type: 'status' })
-    expect(parseCommand('/interact')).toEqual({ type: 'interact' })
+    expect(parseCommand('/history')).toEqual({ type: 'unknown', name: 'history' })
     expect(parseCommand('/q')).toEqual({ type: 'quit' })
     expect(parseCommand('/EXIT')).toEqual({ type: 'quit' })
   })

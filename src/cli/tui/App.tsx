@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { useEffect, useRef, useState } from 'react'
-import { Box, Text, useApp, useInput } from 'ink'
+import { Box, Static, Text, useApp, useInput } from 'ink'
 import { ConfirmInput, Select } from '@inkjs/ui'
 import TextInput from 'ink-text-input'
 import { Auth } from '../../core/auth.js'
@@ -32,7 +32,7 @@ type LogEntry = LogInput & { id: number }
 
 type Mode = 'chat' | 'history' | 'room' | 'login'
 
-type LoginStage = 'select' | 'paste' | 'confirm'
+type LoginStage = 'method' | 'browser' | 'paste' | 'confirm'
 
 type ConnState = 'idle' | 'connecting' | 'connected' | 'disconnected'
 
@@ -50,8 +50,6 @@ const TONE_COLOR: Record<Tone, string> = {
   success: 'green',
 }
 
-const MAX_LOGS = 500
-
 export function App({ store }: { store: Store }) {
   const { exit } = useApp()
   const [self, setSelf] = useState<LoginUser | null>(store.self)
@@ -61,13 +59,11 @@ export function App({ store }: { store: Store }) {
   const [mode, setMode] = useState<Mode>('chat')
   const [input, setInput] = useState('')
   const [loginValue, setLoginValue] = useState('')
-  const [loginStage, setLoginStage] = useState<LoginStage>('select')
+  const [loginStage, setLoginStage] = useState<LoginStage>('method')
   const [browserOptions, setBrowserOptions] = useState<DetectedBrowser[]>([])
   const [pendingBrowser, setPendingBrowser] = useState<BrowserName | null>(null)
   const [notice, setNotice] = useState<{ tone: Tone; text: string } | null>(null)
   const [showInteract, setShowInteract] = useState(false)
-  const [rows, setRows] = useState(process.stdout.rows ?? 24)
-  const [scroll, setScroll] = useState(0)
   const [suggestionIndex, setSuggestionIndex] = useState(0)
   const [menuHidden, setMenuHidden] = useState(false)
 
@@ -78,13 +74,9 @@ export function App({ store }: { store: Store }) {
   const loginBusy = useRef(false)
   const showInteractRef = useRef(showInteract)
   showInteractRef.current = showInteract
-  const logCount = useRef(0)
 
   const append = (entry: LogInput): void => {
-    setLogs((prev) => {
-      const next = [...prev, { ...entry, id: ++logId.current }]
-      return next.length > MAX_LOGS ? next.slice(-MAX_LOGS) : next
-    })
+    setLogs((prev) => [...prev, { ...entry, id: ++logId.current }])
   }
 
   const stopClient = (): void => {
@@ -109,30 +101,6 @@ export function App({ store }: { store: Store }) {
     }
   }, [])
 
-  useEffect(() => {
-    const onResize = (): void => {
-      const columns = process.stdout.columns ?? 80
-      const nextRows = process.stdout.rows ?? 24
-      setRows(nextRows)
-      const text = `终端已调整为 ${columns}×${nextRows}`
-      setNotice({ tone: 'info', text })
-      setTimeout(() => setNotice((prev) => (prev?.text === text ? null : prev)), 1500)
-    }
-    process.stdout.on('resize', onResize)
-    return () => {
-      process.stdout.off('resize', onResize)
-    }
-  }, [])
-
-  useEffect(() => {
-    const appended = logs.length - logCount.current
-    logCount.current = logs.length
-    if (appended > 0) {
-      // 正在翻历史时把视口钉在原地，新弹幕进到底部而不打断阅读
-      setScroll((current) => (current > 0 ? current + appended : 0))
-    }
-  }, [logs.length])
-
   const connectTo = async (target: string): Promise<void> => {
     if (connecting.current) {
       setNotice({ tone: 'warn', text: '正在连接中，请稍候' })
@@ -144,7 +112,6 @@ export function App({ store }: { store: Store }) {
     setConnState('connecting')
     setRoom(null)
     setNotice(null)
-    setScroll(0)
 
     try {
       const roomId = await resolveRoomId(target)
@@ -227,7 +194,6 @@ export function App({ store }: { store: Store }) {
     setConnState('idle')
     setRoom(null)
     setNotice(null)
-    setScroll(0)
     append({ kind: 'system', text: '已断开连接' })
   }
 
@@ -261,7 +227,7 @@ export function App({ store }: { store: Store }) {
     setSelf(user)
     setLoginValue('')
     setMode('chat')
-    setLoginStage('select')
+    setLoginStage('method')
     setPendingBrowser(null)
     setNotice({ tone: 'success', text: `已登录 ${user.name}${from}` })
     append({ kind: 'system', text: `已登录 ${user.name} (@${user.uid})` })
@@ -292,7 +258,7 @@ export function App({ store }: { store: Store }) {
       await completeLogin(result.cookie, ` · 来自 ${label}（${result.profile}）`)
     } catch (error) {
       setNotice({ tone: 'error', text: `登录失败: ${errorText(error)}` })
-      setLoginStage(browserOptions.length > 0 ? 'select' : 'paste')
+      setLoginStage(browserOptions.length > 0 ? 'browser' : 'method')
     }
   }
 
@@ -332,7 +298,7 @@ export function App({ store }: { store: Store }) {
       if (!(await closeBrowser(browser))) {
         setNotice({ tone: 'error', text: `${label} 没有退出，请手动关闭窗口后重新选择` })
         setPendingBrowser(null)
-        setLoginStage(browserOptions.length > 0 ? 'select' : 'paste')
+        setLoginStage(browserOptions.length > 0 ? 'browser' : 'method')
         return
       }
       await runBrowserLogin(browser)
@@ -343,7 +309,7 @@ export function App({ store }: { store: Store }) {
 
   const cancelCloseBrowser = (): void => {
     setPendingBrowser(null)
-    setLoginStage(browserOptions.length > 0 ? 'select' : 'paste')
+    setLoginStage(browserOptions.length > 0 ? 'browser' : 'method')
     setNotice({ tone: 'info', text: '已取消，未关闭浏览器' })
   }
 
@@ -367,18 +333,22 @@ export function App({ store }: { store: Store }) {
       detected = []
     }
     setBrowserOptions(detected)
-    setLoginStage(detected.length > 0 ? 'select' : 'paste')
+    setLoginStage('method')
     setMode('login')
-    setNotice({
-      tone: 'info',
-      text: detected.length > 0 ? '选择登录来源' : '粘贴 Cookie，或输入 Cookie 文件路径',
-    })
+    setNotice({ tone: 'info', text: '选择登录方式' })
   }
 
   const logout = (): void => {
     store.clearLogin()
     setSelf(null)
     append({ kind: 'system', text: '已退出登录，本地登录状态已清除' })
+  }
+
+  const toggleInteract = (): void => {
+    const next = !showInteractRef.current
+    showInteractRef.current = next
+    setShowInteract(next)
+    append({ kind: 'system', text: `互动消息已${next ? '显示' : '隐藏'}` })
   }
 
   const openHistory = (): void => {
@@ -464,9 +434,6 @@ export function App({ store }: { store: Store }) {
           openHistory()
         }
         break
-      case 'history':
-        openHistory()
-        break
       case 'close':
         closeRoom()
         break
@@ -479,12 +446,6 @@ export function App({ store }: { store: Store }) {
       case 'logout':
         logout()
         break
-      case 'interact': {
-        const next = !showInteract
-        setShowInteract(next)
-        append({ kind: 'system', text: `互动消息已${next ? '显示' : '隐藏'}` })
-        break
-      }
       case 'help':
         for (const line of COMMAND_HELP) {
           append({ kind: 'system', text: line })
@@ -500,29 +461,15 @@ export function App({ store }: { store: Store }) {
   }
 
   const chatMenu = mode === 'chat' && !menuHidden ? suggest(input, store.rooms()) : []
-  const overlayLines =
-    mode === 'chat'
-      ? chatMenu.length
-      : mode === 'login'
-        ? loginStage === 'select'
-          ? Math.min(6, browserOptions.length + 2)
-          : loginStage === 'confirm'
-            ? 2
-            : 0
-        : mode === 'history'
-          ? Math.min(9, store.rooms().length + 1)
-          : 0
   const activeSuggestion = Math.min(suggestionIndex, Math.max(0, chatMenu.length - 1))
-  const logHeight = Math.max(3, rows - 5 - overlayLines)
-  const maxScroll = Math.max(0, logs.length - logHeight)
-  const scrollOffset = Math.min(scroll, maxScroll)
-  const logEnd = Math.max(0, logs.length - scrollOffset)
-  const visibleLogs = logs.slice(Math.max(0, logEnd - logHeight), logEnd)
-  const pageStep = Math.max(2, logHeight - 2)
 
   useInput((_input, key) => {
     if (key.ctrl && _input === 'c') {
       quit()
+      return
+    }
+    if (key.ctrl && _input === 'o') {
+      toggleInteract()
       return
     }
     if (chatMenu.length > 0) {
@@ -535,29 +482,23 @@ export function App({ store }: { store: Store }) {
         return
       }
     }
-    if (key.pageUp) {
-      setScroll((current) => Math.min(maxScroll, current + pageStep))
-      return
-    }
-    if (key.pageDown) {
-      setScroll((current) => Math.max(0, current - pageStep))
-      return
-    }
     if (key.escape) {
       if (chatMenu.length > 0) {
         setMenuHidden(true)
         setNotice(null)
         return
       }
-      if (scrollOffset > 0) {
-        setScroll(0)
+      if (mode === 'login' && loginStage !== 'method') {
+        setLoginStage(loginStage === 'confirm' ? 'browser' : 'method')
+        setPendingBrowser(null)
+        setLoginValue('')
         setNotice(null)
         return
       }
       if (mode !== 'chat') {
         setMode('chat')
         setLoginValue('')
-        setLoginStage('select')
+        setLoginStage('method')
         setPendingBrowser(null)
       }
       setNotice(null)
@@ -575,22 +516,31 @@ export function App({ store }: { store: Store }) {
   }))
   historyOptions.push({ label: '输入其他房间号…', value: '__manual__' })
 
-  const loginOptions = [
+  const methodOptions = [
+    { label: '粘贴 Cookie 或输入文件路径', value: '__paste__' },
+    {
+      label:
+        browserOptions.length > 0
+          ? '从浏览器读取 Cookie'
+          : '从浏览器读取 Cookie（未检测到浏览器）',
+      value: '__browser__',
+    },
+    { label: '取消', value: '__cancel__' },
+  ]
+
+  const browserMenuOptions = [
     ...browserOptions.map((browser) => ({
       label: `${browser.label}（读取 Cookie）`,
       value: browser.name,
     })),
-    { label: '粘贴 Cookie 或输入文件路径', value: '__paste__' },
-    { label: '取消', value: '__cancel__' },
+    { label: '返回', value: '__back__' },
   ]
 
   return (
     <Box flexDirection="column" paddingX={1}>
-      <Box flexDirection="column">
-        {visibleLogs.map((entry) => (
-          <LogLine key={entry.id} entry={entry} selfUid={selfUid} />
-        ))}
-      </Box>
+      <Static items={logs}>
+        {(entry) => <LogLine key={entry.id} entry={entry} selfUid={selfUid} />}
+      </Static>
 
       <Box height={1}>
         {notice ? (
@@ -605,7 +555,7 @@ export function App({ store }: { store: Store }) {
       {mode === 'history' ? (
         <Select
           options={historyOptions}
-          visibleOptionCount={Math.min(9, historyOptions.length, Math.max(3, rows - 8))}
+          visibleOptionCount={Math.min(9, historyOptions.length)}
           onChange={(value) => {
             if (value === '__manual__') {
               setMode('room')
@@ -616,10 +566,10 @@ export function App({ store }: { store: Store }) {
           }}
         />
       ) : mode === 'login' ? (
-        loginStage === 'select' ? (
+        loginStage === 'method' ? (
           <Select
-            options={loginOptions}
-            visibleOptionCount={Math.min(6, loginOptions.length)}
+            options={methodOptions}
+            visibleOptionCount={methodOptions.length}
             onChange={(value) => {
               if (value === '__paste__') {
                 setLoginStage('paste')
@@ -629,6 +579,24 @@ export function App({ store }: { store: Store }) {
               if (value === '__cancel__') {
                 setMode('chat')
                 setNotice(null)
+                return
+              }
+              if (browserOptions.length === 0) {
+                setNotice({ tone: 'warn', text: '没有检测到已安装的浏览器，请粘贴 Cookie' })
+                return
+              }
+              setLoginStage('browser')
+              setNotice({ tone: 'info', text: '选择浏览器' })
+            }}
+          />
+        ) : loginStage === 'browser' ? (
+          <Select
+            options={browserMenuOptions}
+            visibleOptionCount={Math.min(6, browserMenuOptions.length)}
+            onChange={(value) => {
+              if (value === '__back__') {
+                setLoginStage('method')
+                setNotice({ tone: 'info', text: '选择登录方式' })
                 return
               }
               void loginWithBrowser(value as BrowserName)
@@ -721,20 +689,20 @@ export function App({ store }: { store: Store }) {
           {mode === 'history'
             ? '↑↓ 选择 · Enter 连接 · Esc 返回'
             : mode === 'login'
-              ? loginStage === 'select'
+              ? loginStage === 'method'
                 ? '↑↓ 选择 · Enter 确认 · Esc 取消'
-                : loginStage === 'confirm'
-                  ? 'y 关闭并继续 · n 取消'
-                  : 'Enter 校验 · Esc 取消'
+                : loginStage === 'browser'
+                  ? '↑↓ 选择 · Enter 读取 · Esc 返回'
+                  : loginStage === 'confirm'
+                    ? 'y 关闭并继续 · n 取消'
+                    : 'Enter 校验 · Esc 返回'
               : mode === 'room'
                 ? '输入房间号 · Enter 连接 · Esc 取消'
-                : scrollOffset > 0
-                  ? `历史 ${logEnd}/${logs.length} · PgUp/PgDn 翻页 · Esc 回到底部`
-                  : chatMenu.length > 0
-                    ? '↑↓ 选择 · Tab/Enter 补全 · Esc 收起'
-                    : connState === 'connected'
-                      ? 'Enter 发送 · / 命令建议 · PgUp 历史 · /help'
-                      : '输入 / 查看命令 · PgUp 历史 · /history 连接 · /login 登录'}
+                : chatMenu.length > 0
+                  ? '↑↓ 选择 · Tab/Enter 补全 · Esc 收起'
+                  : connState === 'connected'
+                    ? 'Enter 发送 · / 命令建议 · Ctrl+O 互动 · /help'
+                    : '输入 / 查看命令 · /connect 连接 · /login 登录 · Ctrl+O 互动'}
         </Text>
       </Box>
     </Box>

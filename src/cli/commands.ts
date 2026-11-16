@@ -1,11 +1,9 @@
 export type Command =
   | { type: 'connect'; room?: string }
-  | { type: 'history' }
   | { type: 'close' }
   | { type: 'status' }
   | { type: 'login'; source?: string }
   | { type: 'logout' }
-  | { type: 'interact' }
   | { type: 'help' }
   | { type: 'quit' }
   | { type: 'unknown'; name: string }
@@ -18,15 +16,13 @@ const ALIASES: Record<string, Command['type']> = {
 
 export const COMMAND_HELP = [
   '/connect [房间号]  连接直播间，不带房间号从历史里选',
-  '/history           查看最近连接过的直播间',
   '/close             断开当前直播间',
   '/status            查看连接与登录状态',
-  '/login [来源]      登录：选择已安装的浏览器（Chromium 系通过 CDP 读取），或粘贴 Cookie、给 Cookie 文件路径',
+  '/login [来源]      登录：粘贴 Cookie，或从已安装的浏览器读取',
   '/logout            清除本地登录状态',
-  '/interact          显示/隐藏进场、关注等互动消息',
   '/help              显示帮助',
   '/quit              退出',
-  '直接输入文字会作为弹幕发送',
+  '直接输入文字会作为弹幕发送，Ctrl+O 显示/隐藏互动消息',
 ]
 
 /** 解析一行输入：斜杠开头是命令，其余整行都算弹幕内容。 */
@@ -49,11 +45,9 @@ export function parseCommand(input: string): Command | null {
       return { type: 'connect', room: arg || undefined }
     case 'login':
       return { type: 'login', source: arg || undefined }
-    case 'history':
     case 'close':
     case 'status':
     case 'logout':
-    case 'interact':
     case 'help':
     case 'quit':
       return { type }
