@@ -28,34 +28,46 @@ function Medal({ user }: { user: UserInfo }) {
   )
 }
 
-function User({ user }: { user: UserInfo }) {
-  return <Text color={userColor(user.guardLevel)}>{userLink(user.uid, user.name)}</Text>
+function User({ user, mine }: { user: UserInfo; mine?: boolean }) {
+  return (
+    <Text color={mine ? 'green' : userColor(user.guardLevel)}>{userLink(user.uid, user.name)}</Text>
+  )
+}
+
+function isSelf(user: UserInfo, selfUid: string | undefined): boolean {
+  return selfUid !== undefined && user.uid === selfUid
 }
 
 function yuan(price: number): string {
   return ` ￥${price.toFixed(price % 1 === 0 ? 0 : 2)}`
 }
 
-export function EventLine({ event }: { event: LiveEvent }) {
+export function EventLine({ event, selfUid }: { event: LiveEvent; selfUid?: string }) {
   switch (event.type) {
-    case 'danmu':
+    case 'danmu': {
+      const mine = isSelf(event.user, selfUid)
       return (
         <Text>
           <Medal user={event.user} />
-          <User user={event.user} />
-          <Text>: {event.body}</Text>
+          <User user={event.user} mine={mine} />
+          <Text color={mine ? 'green' : undefined}>: {event.body}</Text>
         </Text>
       )
-    case 'emoji':
+    }
+    case 'emoji': {
+      const mine = isSelf(event.user, selfUid)
       return (
         <Text>
           <Medal user={event.user} />
-          <User user={event.user} />
+          <User user={event.user} mine={mine} />
           <Text>: [</Text>
-          <Text color="yellow">{event.uri ? oscLink(event.body, event.uri) : event.body}</Text>
+          <Text color={mine ? 'green' : 'yellow'}>
+            {event.uri ? oscLink(event.body, event.uri) : event.body}
+          </Text>
           <Text>]</Text>
         </Text>
       )
+    }
     case 'gift': {
       const color = giftColor(event.price)
       return (

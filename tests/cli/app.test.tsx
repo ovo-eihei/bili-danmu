@@ -71,4 +71,59 @@ describe('App', () => {
 
     unmount()
   })
+
+  test('输入 / 在下方列出命令建议，Esc 收起', async () => {
+    const { lastFrame, stdin, unmount } = render(<App store={createStore()} />)
+
+    stdin.write('/')
+    await delay()
+    expect(lastFrame()).toContain('/connect')
+    expect(lastFrame()).toContain('↑↓ 选择')
+
+    stdin.write('\u001B')
+    await delay()
+    expect(lastFrame()).not.toContain('↑↓ 选择')
+    expect(lastFrame()).toContain('查看命令')
+
+    unmount()
+  })
+
+  test('方向键加 Enter 选中建议填进输入框', async () => {
+    const { lastFrame, stdin, unmount } = render(<App store={createStore()} />)
+
+    stdin.write('/co')
+    await delay()
+    stdin.write('\u001B[B')
+    await delay()
+    stdin.write('\r')
+    await delay()
+
+    expect(lastFrame()).toContain('/connect')
+    expect(lastFrame()).not.toContain('↑↓ 选择')
+
+    unmount()
+  })
+
+  test('PgUp 翻看历史弹幕，Esc 回到底部', async () => {
+    const { lastFrame, stdin, unmount } = render(<App store={createStore()} />)
+
+    for (let i = 0; i < 3; i++) {
+      stdin.write('/help')
+      await delay(20)
+      stdin.write('\r')
+      await delay()
+    }
+
+    stdin.write('\u001B[5~')
+    await delay()
+    const scrolled = lastFrame() ?? ''
+    expect(scrolled).toContain('欢迎使用 bili-danmu')
+    expect(scrolled).toContain('历史 ')
+
+    stdin.write('\u001B')
+    await delay()
+    expect(lastFrame()).not.toContain('PgUp/PgDn 翻页')
+
+    unmount()
+  })
 })

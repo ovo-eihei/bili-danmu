@@ -1,68 +1,81 @@
-const COMMANDS = [
-  'connect',
-  'history',
-  'close',
-  'status',
-  'login',
-  'logout',
-  'interact',
-  'help',
-  'quit',
+export interface SuggestionRoom {
+  roomId: number
+  owner?: string
+  title?: string
+}
+
+export interface Suggestion {
+  /** 选中后填进输入框的完整内容。 */
+  value: string
+  label: string
+  hint?: string
+}
+
+const COMMANDS: { name: string; summary: string }[] = [
+  { name: 'connect', summary: '连接直播间' },
+  { name: 'history', summary: '最近连接过的直播间' },
+  { name: 'close', summary: '断开当前直播间' },
+  { name: 'status', summary: '连接与登录状态' },
+  { name: 'login', summary: '登录账号' },
+  { name: 'logout', summary: '清除本地登录状态' },
+  { name: 'interact', summary: '显示/隐藏互动消息' },
+  { name: 'help', summary: '命令列表' },
+  { name: 'quit', summary: '退出' },
 ]
 
 const LOGIN_SOURCES = ['chrome', 'edge', 'brave', 'firefox']
 
-export interface Completion {
-  value: string
-  options: string[]
-}
-
-/** Tab 补全：命令名、/connect 的历史房间号、/login 的浏览器名。 */
-export function complete(input: string, rooms: number[]): Completion | null {
+/**
+ * 斜杠命令建议：命令名，以及 /connect 的历史房间号、/login 的浏览器名。
+ * 返回空数组表示不展示建议列表。
+ */
+export function suggest(
+  input: string,
+  rooms: SuggestionRoom[],
+  limit = 6,
+): Suggestion[] {
   if (!input.startsWith('/')) {
-    return null
+    return []
   }
 
   const spaceIndex = input.indexOf(' ')
   if (spaceIndex === -1) {
     const prefix = input.slice(1).toLowerCase()
-    const matches = COMMANDS.filter((name) => name.startsWith(prefix))
-    return build('', '/', prefix, matches)
+    return COMMANDS.filter((item) => item.name.startsWith(prefix))
+      .slice(0, limit)
+      .map((item) => ({
+        value: `/${item.name} `,
+        label: `/${item.name}`,
+        hint: item.summary,
+      }))
   }
 
   const command = input.slice(1, spaceIndex).toLowerCase()
   const prefix = input.slice(spaceIndex + 1)
   if (prefix.includes(' ')) {
-    return null
+    return []
   }
-  const head = input.slice(0, spaceIndex + 1)
 
+  const head = input.slice(0, spaceIndex + 1)
   if (command === 'connect' && /^\d*$/.test(prefix)) {
-    return build(head, '', prefix, rooms.map(String).filter((id) => id.startsWith(prefix)))
+    return rooms
+      .filter((room) => String(room.roomId).startsWith(prefix))
+      .slice(0, limit)
+      .map((room) => ({
+        value: `${head}${room.roomId} `,
+        label: String(room.roomId),
+        hint: room.owner ?? room.title ?? '历史直播间',
+      }))
   }
   if (command === 'login') {
-    return build(head, '', prefix, LOGIN_SOURCES.filter((name) => name.startsWith(prefix.toLowerCase())))
+    const lower = prefix.toLowerCase()
+    return LOGIN_SOURCES.filter((name) => name.startsWith(lower))
+      .slice(0, limit)
+      .map((name) => ({
+        value: `${head}${name} `,
+        label: name,
+        hint: '从本机浏览器读取 Cookie',
+      }))
   }
-  return null
-}
-
-function build(head: string, marker: string, prefix: string, matches: string[]): Completion | null {
-  if (matches.length === 0) {
-    return null
-  }
-  if (matches.length === 1) {
-    return { value: `${head}${marker}${matches[0]} `, options: matches }
-  }
-  const common = commonPrefix(matches)
-  return { value: head + marker + (common.length > prefix.length ? common : prefix), options: matches }
-}
-
-function commonPrefix(values: string[]): string {
-  let prefix = values[0]
-  for (const value of values.slice(1)) {
-    while (prefix && !value.startsWith(prefix)) {
-      prefix = prefix.slice(0, -1)
-    }
-  }
-  return prefix
+  return []
 }

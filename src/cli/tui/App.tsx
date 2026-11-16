@@ -6,7 +6,8 @@ import TextInput from 'ink-text-input'
 import { Auth } from '../../core/auth.js'
 import { DanmuClient } from '../../core/client.js'
 import { COMMAND_HELP, parseCommand } from '../commands.js'
-import { complete } from '../completions.js'
+import { suggest } from '../completions.js'
+import type { Suggestion } from '../completions.js'
 import { parseEvent } from '../../core/events.js'
 import type { LiveEvent } from '../../core/events.js'
 import { validateCookie } from '../../core/login.js'
@@ -25,7 +26,6 @@ type Tone = 'info' | 'warn' | 'error' | 'success'
 type LogInput =
   | { kind: 'system'; text: string; tone?: Tone }
   | { kind: 'event'; event: LiveEvent }
-  | { kind: 'self'; text: string }
 
 type LogEntry = LogInput & { id: number }
 
@@ -63,6 +63,9 @@ export function App({ store }: { store: Store }) {
   const [notice, setNotice] = useState<{ tone: Tone; text: string } | null>(null)
   const [showInteract, setShowInteract] = useState(false)
   const [rows, setRows] = useState(process.stdout.rows ?? 24)
+  const [scroll, setScroll] = useState(0)
+  const [suggestionIndex, setSuggestionIndex] = useState(0)
+  const [menuHidden, setMenuHidden] = useState(false)
 
   const logId = useRef(0)
   const clientRef = useRef<DanmuClient | null>(null)
@@ -70,6 +73,7 @@ export function App({ store }: { store: Store }) {
   const connecting = useRef(false)
   const showInteractRef = useRef(showInteract)
   showInteractRef.current = showInteract
+  const logCount = useRef(0)
 
   const append = (entry: LogInput): void => {
     setLogs((prev) => {
@@ -104,8 +108,6 @@ export function App({ store }: { store: Store }) {
     const onResize = (): void => {
       const columns = process.stdout.columns ?? 80
       const nextRows = process.stdout.rows ?? 24
-      // 旧帧按调整前的宽度排版，直接重绘会留下错位残影，先清屏再强制重绘
-      process.stdout.write('\x1b[2J\x1b[H')
       setRows(nextRows)
       const text = `终端已调整为 ${columns}×${nextRows}`
       setNotice({ tone: 'info', text })
@@ -116,6 +118,15 @@ export function App({ store }: { store: Store }) {
       process.stdout.off('resize', onResize)
     }
   }, [])
+
+  useEffect(() => {
+    const appended = logs.length - logCount.current
+    logCount.current = logs.length
+    if (appended > 0) {
+      // 正在翻历史时把视口钉在原地，新弹幕进到底部而不打断阅读
+      setScroll((current) => (current > 0 ? current + appended : 0))
+    }
+  }, [logs.length])
 
   const connectTo = async (target: string): Promise<void> => {
     if (connecting.current) {
@@ -128,6 +139,7 @@ export function App({ store }: { store: Store }) {
     setConnState('connecting')
     setRoom(null)
     setNotice(null)
+    setScroll(0)
 
     try {
       const roomId = await resolveRoomId(target)
@@ -210,6 +222,7 @@ export function App({ store }: { store: Store }) {
     setConnState('idle')
     setRoom(null)
     setNotice(null)
+    setScroll(0)
     append({ kind: 'system', text: '已断开连接' })
   }
 
@@ -229,7 +242,6 @@ export function App({ store }: { store: Store }) {
     }
     try {
       await sendDanmu(store.cookie, room.roomId, text)
-      append({ kind: 'self', text })
       setNotice(null)
     } catch (error) {
       setNotice({ tone: 'error', text: errorText(error) })
@@ -304,30 +316,28 @@ export function App({ store }: { store: Store }) {
     exit()
   }
 
-  const applyCompletion = (base: string): boolean => {
-    const result = complete(base, store.rooms().map((item) => item.roomId))
-    if (!result) {
-      return false
-    }
-    setInput(result.value)
-    setNotice(
-      result.options.length > 1
-        ? { tone: 'info', text: `补全: ${result.options.join('  ')}` }
-        : null,
-    )
-    return true
+  const applySuggestion = (item: Suggestion): void => {
+    setInput(item.value)
+    setSuggestionIndex(0)
+    setMenuHidden(false)
+    setNotice(null)
   }
 
   const handleChatChange = (value: string): void => {
     if (value.endsWith('\t')) {
       const base = value.slice(0, -1)
-      if (!applyCompletion(base)) {
+      const items = suggest(base, store.rooms())
+      if (items.length === 0) {
         setInput(base)
         setNotice({ tone: 'warn', text: '没有匹配的补全项' })
+        return
       }
+      applySuggestion(items[Math.min(suggestionIndex, items.length - 1)])
       return
     }
     setInput(value)
+    setSuggestionIndex(0)
+    setMenuHidden(false)
   }
 
   const handleLoginChange = (value: string): void => {
@@ -351,8 +361,19 @@ export function App({ store }: { store: Store }) {
   }
 
   const handleSubmit = (raw: string): void => {
+    const items = suggest(raw, store.rooms())
+    if (!menuHidden && items.length > 0) {
+      const active = items[Math.min(suggestionIndex, items.length - 1)]
+      if (raw.trim() !== active.value.trim()) {
+        applySuggestion(active)
+        return
+      }
+    }
+
     const command = parseCommand(raw)
     setInput('')
+    setSuggestionIndex(0)
+    setMenuHidden(false)
     if (!command) {
       return
     }
@@ -409,12 +430,49 @@ export function App({ store }: { store: Store }) {
     }
   }
 
+  const chatMenu = mode === 'chat' && !menuHidden ? suggest(input, store.rooms()) : []
+  const activeSuggestion = Math.min(suggestionIndex, Math.max(0, chatMenu.length - 1))
+  const logHeight = Math.max(4, rows - 5 - chatMenu.length)
+  const maxScroll = Math.max(0, logs.length - logHeight)
+  const scrollOffset = Math.min(scroll, maxScroll)
+  const logEnd = Math.max(0, logs.length - scrollOffset)
+  const visibleLogs = logs.slice(Math.max(0, logEnd - logHeight), logEnd)
+  const pageStep = Math.max(2, logHeight - 2)
+
   useInput((_input, key) => {
     if (key.ctrl && _input === 'c') {
       quit()
       return
     }
+    if (chatMenu.length > 0) {
+      if (key.upArrow) {
+        setSuggestionIndex((index) => (index - 1 + chatMenu.length) % chatMenu.length)
+        return
+      }
+      if (key.downArrow) {
+        setSuggestionIndex((index) => (index + 1) % chatMenu.length)
+        return
+      }
+    }
+    if (key.pageUp) {
+      setScroll((current) => Math.min(maxScroll, current + pageStep))
+      return
+    }
+    if (key.pageDown) {
+      setScroll((current) => Math.max(0, current - pageStep))
+      return
+    }
     if (key.escape) {
+      if (chatMenu.length > 0) {
+        setMenuHidden(true)
+        setNotice(null)
+        return
+      }
+      if (scrollOffset > 0) {
+        setScroll(0)
+        setNotice(null)
+        return
+      }
       if (mode !== 'chat') {
         setMode('chat')
         setLoginValue('')
@@ -424,6 +482,7 @@ export function App({ store }: { store: Store }) {
   })
 
   const status = STATUS[connState]
+  const selfUid = self ? String(self.uid) : undefined
   const roomLabel = room
     ? `${oscLink(String(room.roomId), `https://live.bilibili.com/${room.roomId}`)}${room.owner ? ` ${room.owner}` : ''}`
     : ''
@@ -433,13 +492,11 @@ export function App({ store }: { store: Store }) {
   }))
   historyOptions.push({ label: '输入其他房间号…', value: '__manual__' })
 
-  const visibleLogs = logs.slice(-Math.max(4, rows - 6))
-
   return (
     <Box flexDirection="column" paddingX={1}>
       <Box flexDirection="column">
         {visibleLogs.map((entry) => (
-          <LogLine key={entry.id} entry={entry} />
+          <LogLine key={entry.id} entry={entry} selfUid={selfUid} />
         ))}
       </Box>
 
@@ -507,6 +564,23 @@ export function App({ store }: { store: Store }) {
         </Box>
       )}
 
+      {chatMenu.length > 0 ? (
+        <Box flexDirection="column">
+          {chatMenu.map((item, index) => (
+            <Text
+              key={item.value}
+              inverse={index === activeSuggestion}
+              color={index === activeSuggestion ? undefined : 'gray'}
+              wrap="truncate-end"
+            >
+              {' '}
+              {item.label}
+              {item.hint ? `  ${item.hint}` : ''}
+            </Text>
+          ))}
+        </Box>
+      ) : null}
+
       <Box height={1}>
         <Text dimColor wrap="truncate-end">
           {status.dot} {status.text}
@@ -519,29 +593,25 @@ export function App({ store }: { store: Store }) {
           {mode === 'history'
             ? '↑↓ 选择 · Enter 连接 · Esc 返回'
             : mode === 'login'
-              ? `Tab 补全浏览器名 · Enter 校验 · Esc 取消`
+              ? 'Tab 补全浏览器名 · Enter 校验 · Esc 取消'
               : mode === 'room'
                 ? '输入房间号 · Enter 连接 · Esc 取消'
-                : connState === 'connected'
-                  ? 'Enter 发送 · Tab 补全 · /help 命令 · /close 断开'
-                  : 'Tab 补全 · /history 连接历史 · /login 登录 · /help 命令'}
+                : scrollOffset > 0
+                  ? `历史 ${logEnd}/${logs.length} · PgUp/PgDn 翻页 · Esc 回到底部`
+                  : chatMenu.length > 0
+                    ? '↑↓ 选择 · Tab/Enter 补全 · Esc 收起'
+                    : connState === 'connected'
+                      ? 'Enter 发送 · / 命令建议 · PgUp 历史 · /help'
+                      : '输入 / 查看命令 · PgUp 历史 · /history 连接 · /login 登录'}
         </Text>
       </Box>
     </Box>
   )
 }
 
-function LogLine({ entry }: { entry: LogEntry }) {
+function LogLine({ entry, selfUid }: { entry: LogEntry; selfUid?: string }) {
   if (entry.kind === 'event') {
-    return <EventLine event={entry.event} />
-  }
-  if (entry.kind === 'self') {
-    return (
-      <Text>
-        <Text color="green">我: </Text>
-        <Text>{entry.text}</Text>
-      </Text>
-    )
+    return <EventLine event={entry.event} selfUid={selfUid} />
   }
   return (
     <Text color={entry.tone ? TONE_COLOR[entry.tone] : undefined} dimColor={!entry.tone || entry.tone === 'info'}>
