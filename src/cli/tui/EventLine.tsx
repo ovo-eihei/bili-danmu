@@ -5,6 +5,7 @@ import {
   medalColor,
   oscLink,
   superChatColor,
+  UI_COLOR,
   userColor,
   userLink,
 } from './format.js'
@@ -30,7 +31,9 @@ function Medal({ user }: { user: UserInfo }) {
 
 function User({ user, mine }: { user: UserInfo; mine?: boolean }) {
   return (
-    <Text color={mine ? 'green' : userColor(user.guardLevel)}>{userLink(user.uid, user.name)}</Text>
+    <Text color={mine ? UI_COLOR.self : userColor(user.guardLevel)}>
+      {userLink(user.uid, user.name)}
+    </Text>
   )
 }
 
@@ -50,7 +53,7 @@ export function EventLine({ event, selfUid }: { event: LiveEvent; selfUid?: stri
         <Text>
           <Medal user={event.user} />
           <User user={event.user} mine={mine} />
-          <Text color={mine ? 'green' : undefined}>: {event.body}</Text>
+          <Text color={mine ? UI_COLOR.self : undefined}>: {event.body}</Text>
         </Text>
       )
     }
@@ -61,7 +64,7 @@ export function EventLine({ event, selfUid }: { event: LiveEvent; selfUid?: stri
           <Medal user={event.user} />
           <User user={event.user} mine={mine} />
           <Text>: [</Text>
-          <Text color={mine ? 'green' : 'yellow'}>
+          <Text color={mine ? UI_COLOR.self : '#ffd166'}>
             {event.uri ? oscLink(event.body, event.uri) : event.body}
           </Text>
           <Text>]</Text>
@@ -102,7 +105,7 @@ export function EventLine({ event, selfUid }: { event: LiveEvent; selfUid?: stri
     }
     case 'interact':
       return (
-        <Text dimColor>
+        <Text color={UI_COLOR.dim}>
           <User user={event.user} /> [{INTERACT_NAMES[event.msgTypeName] ?? '互动'}]
         </Text>
       )

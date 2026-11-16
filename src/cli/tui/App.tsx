@@ -3,7 +3,6 @@ import { readFile } from 'node:fs/promises'
 import { useEffect, useRef, useState } from 'react'
 import { Box, Static, Text, useApp, useInput } from 'ink'
 import { ConfirmInput, Select } from '@inkjs/ui'
-import TextInput from 'ink-text-input'
 import { Auth } from '../../core/auth.js'
 import { DanmuClient } from '../../core/client.js'
 import { COMMAND_HELP, parseCommand } from '../commands.js'
@@ -20,7 +19,8 @@ import { browserLabel, browserName, closeBrowser, detectBrowsers, isBrowserRunni
 import type { BrowserName, DetectedBrowser } from '../browser-cookies.js'
 import type { Store } from '../store.js'
 import { EventLine } from './EventLine.js'
-import { oscLink } from './format.js'
+import { oscLink, UI_COLOR } from './format.js'
+import { TextInput } from './TextInput.js'
 
 type Tone = 'info' | 'warn' | 'error' | 'success'
 
@@ -37,17 +37,17 @@ type LoginStage = 'method' | 'browser' | 'paste' | 'confirm'
 type ConnState = 'idle' | 'connecting' | 'connected' | 'disconnected'
 
 const STATUS: Record<ConnState, { dot: string; text: string; color: string }> = {
-  idle: { dot: '○', text: '未连接', color: 'gray' },
-  connecting: { dot: '◐', text: '连接中', color: 'yellow' },
-  connected: { dot: '●', text: '已连接', color: 'green' },
-  disconnected: { dot: '○', text: '已断开', color: 'yellow' },
+  idle: { dot: '○', text: '未连接', color: UI_COLOR.dim },
+  connecting: { dot: '◐', text: '连接中', color: UI_COLOR.warn },
+  connected: { dot: '●', text: '已连接', color: UI_COLOR.success },
+  disconnected: { dot: '○', text: '已断开', color: UI_COLOR.warn },
 }
 
 const TONE_COLOR: Record<Tone, string> = {
-  info: 'gray',
-  warn: 'yellow',
-  error: 'red',
-  success: 'green',
+  info: UI_COLOR.info,
+  warn: UI_COLOR.warn,
+  error: UI_COLOR.error,
+  success: UI_COLOR.success,
 }
 
 export function App({ store }: { store: Store }) {
@@ -611,7 +611,7 @@ export function App({ store }: { store: Store }) {
           />
         ) : loginStage === 'confirm' && pendingBrowser ? (
           <Box flexDirection="column">
-            <Text color="yellow">
+            <Text color={UI_COLOR.warn}>
               关闭 {browserLabel(pendingBrowser)} 并继续？未保存的页面可能丢失。
             </Text>
             <Text dimColor>
@@ -630,7 +630,7 @@ export function App({ store }: { store: Store }) {
           </Box>
         ) : (
           <Box>
-            <Text color="cyan">Cookie ❯ </Text>
+            <Text color={UI_COLOR.accent}>Cookie ❯ </Text>
             <TextInput
               value={loginValue}
               onChange={setLoginValue}
@@ -642,7 +642,7 @@ export function App({ store }: { store: Store }) {
         )
       ) : mode === 'room' ? (
         <Box>
-          <Text color="cyan">房间号 ❯ </Text>
+          <Text color={UI_COLOR.accent}>房间号 ❯ </Text>
           <TextInput
             value={input}
             onChange={(value) => setInput(value.replace(/\t/g, ''))}
@@ -658,7 +658,7 @@ export function App({ store }: { store: Store }) {
         </Box>
       ) : (
         <Box>
-          <Text color={connState === 'connected' ? 'green' : 'gray'}>❯ </Text>
+          <Text color={connState === 'connected' ? UI_COLOR.success : UI_COLOR.dim}>❯ </Text>
           <TextInput
             key={`chat-${inputEpoch}`}
             value={input}
@@ -689,9 +689,13 @@ export function App({ store }: { store: Store }) {
       ) : null}
 
       <Box height={1}>
-        <Text dimColor wrap="truncate-end">
-          {status.dot} {status.text}
-          {roomLabel ? ` ${roomLabel}` : ''} · {self ? `已登录 ${self.name}` : '未登录'}
+        <Text wrap="truncate-end">
+          <Text color={status.color}>{status.dot} {status.text}</Text>
+          {roomLabel ? <Text color={UI_COLOR.room}> {roomLabel}</Text> : null}
+          <Text dimColor> · </Text>
+          <Text color={self ? UI_COLOR.success : UI_COLOR.dim}>
+            {self ? `已登录 ${self.name}` : '未登录'}
+          </Text>
         </Text>
       </Box>
 
@@ -712,8 +716,18 @@ export function App({ store }: { store: Store }) {
                 : chatMenu.length > 0
                   ? '↑↓ 选择 · Tab/Enter 补全 · Esc 收起'
                   : connState === 'connected'
-                    ? 'Enter 发送 · / 命令建议 · Ctrl+O 互动 · /help'
-                    : '输入 / 查看命令 · /connect 连接 · /login 登录 · Ctrl+O 互动'}
+                    ? 'Enter 发送 · / 命令建议 · /help'
+                    : '输入 / 查看命令 · /connect 连接 · /login 登录'}
+        </Text>
+      </Box>
+
+      <Box height={1}>
+        <Text wrap="truncate-end">
+          <Text color={UI_COLOR.hotkey} bold>Ctrl+O</Text>
+          <Text color={showInteract ? UI_COLOR.success : UI_COLOR.dim}>
+            {showInteract ? ' 隐藏互动消息' : ' 显示互动消息'}
+          </Text>
+          <Text dimColor> · /help 查看全部命令</Text>
         </Text>
       </Box>
     </Box>
@@ -725,7 +739,7 @@ function LogLine({ entry, selfUid }: { entry: LogEntry; selfUid?: string }) {
     return <EventLine event={entry.event} selfUid={selfUid} />
   }
   return (
-    <Text color={entry.tone ? TONE_COLOR[entry.tone] : undefined} dimColor={!entry.tone || entry.tone === 'info'}>
+    <Text color={entry.tone ? TONE_COLOR[entry.tone] : undefined} dimColor={!entry.tone}>
       · {entry.text}
     </Text>
   )

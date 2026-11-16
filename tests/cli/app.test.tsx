@@ -108,16 +108,20 @@ describe('App', () => {
     unmount()
   })
 
-  test('Ctrl+O 切换互动消息显示', async () => {
-    const { frames, stdin, unmount } = render(<App store={createStore()} />)
+  test('Ctrl+O 切换互动消息显示，底部常驻状态同步变化', async () => {
+    const { frames, lastFrame, stdin, unmount } = render(<App store={createStore()} />)
+
+    expect(lastFrame()).toContain('显示互动消息')
 
     stdin.write('\u000F')
     await delay()
     expect(frames.join('')).toContain('互动消息已显示')
+    expect(lastFrame()).toContain('隐藏互动消息')
 
     stdin.write('\u000F')
     await delay()
     expect(frames.join('')).toContain('互动消息已隐藏')
+    expect(lastFrame()).toContain('显示互动消息')
 
     unmount()
   })
