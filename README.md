@@ -24,22 +24,33 @@ npm link             # 之后可直接用 bili-danmu
 bili-danmu
 ```
 
-启动后是一个聊天式终端界面：
+启动后是一个聊天式终端界面，日志区只保留最近若干行，底部固定显示输入框与状态：
 
 ```
-╭──────────────────────────────────────────────╮
-│ bili-danmu                     ● 已连接 · 545068 │
-│ v0.1.0 · 已登录 立青                          │
-╰──────────────────────────────────────────────╯
-12:21:04 [弹幕] 彩绫恋音 [德云色 2]: 晚上好
-12:21:05 [礼物] 某用户 送出 小花花 ×2 ¥0.2
-/connect /history /close /status /login /interact /help /quit
+❯ bili-danmu
+
+· 欢迎使用 bili-danmu
+· /connect [房间号] 连接直播间 · /login 登录 · /help 查看全部命令
+· Tab 补全命令与历史房间号
+· 连接直播间 22603245 · 永雏塔菲
+· 已连接
+[塔菲|22]彩绫恋音: 晚上好
+[塔菲|31]雏草姬 [辣条] × 10 ￥0.1
+[塔菲|12]某水草: [妙]
+[塔菲|28]阿草 [舰长] × 1 ￥198
+[塔菲|35]小雏草 [￥30 塔菲今天也好可爱]
 ❯ 输入弹幕，Enter 发送
+● 已连接 22603245 永雏塔菲 · 已登录 立青
+Enter 发送 · Tab 补全 · /help 命令 · /close 断开
 ```
 
 1. `/login` 回车后粘贴浏览器里的 Cookie（输入内容以 `*` 显示）；也可以 `/login ./cookie.txt` 读文件，或 `/login chrome|edge|brave|firefox` 直接读本机浏览器
-2. `/connect 545068` 连接直播间，不带房间号时从连接历史里选
+2. `/connect 22603245` 连接永雏塔菲的直播间，不带房间号时从连接历史里选
 3. 直接输入文字回车即发送弹幕；`/close` 断开
+
+事件输出参考 [mouse-danmu](https://github.com/ovo-liqing/mouse-danmu) 的样式：粉丝团显示为 `[名称|等级]` 并按等级着色，用户名按大航海等级着色，礼物、醒目留言按金额分档着色。用户名可点击打开 B 站个人空间，表情弹幕可点击打开表情图片（依赖终端支持 OSC 8 超链接，Windows Terminal、iTerm2 等可用；不支持的终端显示为普通文本）。
+
+输入 `/` 开头的内容按 Tab 补全：命令名、`/connect` 的历史房间号、`/login` 的浏览器名；多个候选时会在提示行列出。调整窗口大小时会清屏重绘，避免旧内容错位。
 
 ## 命令
 
@@ -74,10 +85,10 @@ bili-danmu
 适合脚本和重定向，默认复用已保存的登录：
 
 ```bash
-bili-danmu watch 545068                 # 输出弹幕等事件
-bili-danmu watch 545068 --json          # JSON Lines
-bili-danmu watch 545068 --raw           # 原始消息 JSON
-bili-danmu send 545068 "晚上好"          # 发弹幕
+bili-danmu watch 22603245                # 输出弹幕等事件
+bili-danmu watch 22603245 --json         # JSON Lines
+bili-danmu watch 22603245 --raw          # 原始消息 JSON
+bili-danmu send 22603245 "晚上好"         # 发弹幕
 ```
 
 `watch` 支持 `--cookie-file`，`send` 支持 `--cookie-file` 或环境变量 `BILI_COOKIE`，优先级：环境变量 > 文件 > 已保存登录。
@@ -87,7 +98,7 @@ bili-danmu send 545068 "晚上好"          # 发弹幕
 ```ts
 import { Auth, DanmuClient, parseEvent, sendDanmu } from 'bili-danmu'
 
-const auth = await Auth.create(545068)
+const auth = await Auth.create(22603245)
 const client = new DanmuClient({
   onMessage: (message) => {
     const event = parseEvent(message)
@@ -98,7 +109,7 @@ const client = new DanmuClient({
 })
 await client.connect(auth)
 
-await sendDanmu(cookie, 545068, '晚上好')
+await sendDanmu(cookie, 22603245, '晚上好')
 ```
 
 ## 已支持的事件
@@ -135,8 +146,10 @@ src/
   cli/
     main.ts         bin 入口与子命令
     commands.ts     交互命令解析
+    completions.ts  Tab 补全（命令、房间号、浏览器名）
+    browser-cookies.ts  从本机浏览器读取登录 Cookie
     store.ts        登录与连接历史持久化
-    tui/            Ink 界面组件
+    tui/            Ink 界面组件（App、EventLine、format）
 ```
 
 ## 开发

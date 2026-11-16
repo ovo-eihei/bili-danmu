@@ -1,91 +1,97 @@
 import { Text } from 'ink'
-import type { LiveEvent } from '../../core/events.js'
+import type { LiveEvent, UserInfo } from '../../core/events.js'
+import {
+  giftColor,
+  medalColor,
+  oscLink,
+  superChatColor,
+  userColor,
+  userLink,
+} from './format.js'
 
 const INTERACT_NAMES: Record<string, string> = {
-  ENTER: '进场',
-  FOLLOW: '关注',
-  SHARE: '分享',
-  SPECIAL_FOLLOW: '特别关注',
-  MUTUAL_FOLLOW: '互相关注',
+  ENTER: '进入直播间',
+  FOLLOW: '关注了主播',
+  SHARE: '分享了直播间',
+  SPECIAL_FOLLOW: '特别关注了主播',
+  MUTUAL_FOLLOW: '互粉了主播',
 }
 
-export function timeString(date = new Date()): string {
-  return date.toLocaleTimeString('zh-CN', { hour12: false })
+function Medal({ user }: { user: UserInfo }) {
+  if (!user.fansMedal) {
+    return null
+  }
+  return (
+    <Text color={medalColor(user.fansMedal.level)}>
+      [{user.fansMedal.name}|{user.fansMedal.level}]
+    </Text>
+  )
 }
 
-function userName(event: Exclude<LiveEvent, { type: 'interact' }>): string {
-  const { name, fansMedal, guardLevel } = event.user
-  const medals = [
-    fansMedal ? `[${fansMedal.name} ${fansMedal.level}]` : '',
-    guardLevel > 0 ? `(${guardLevel})` : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-  return medals ? `${name} ${medals}` : name
+function User({ user }: { user: UserInfo }) {
+  return <Text color={userColor(user.guardLevel)}>{userLink(user.uid, user.name)}</Text>
+}
+
+function yuan(price: number): string {
+  return ` ￥${price.toFixed(price % 1 === 0 ? 0 : 2)}`
 }
 
 export function EventLine({ event }: { event: LiveEvent }) {
-  const time = <Text dimColor>{timeString()} </Text>
-
   switch (event.type) {
     case 'danmu':
       return (
         <Text>
-          {time}
-          <Text color="cyan">[弹幕] </Text>
-          <Text bold>{userName(event)}</Text>
+          <Medal user={event.user} />
+          <User user={event.user} />
           <Text>: {event.body}</Text>
         </Text>
       )
     case 'emoji':
       return (
         <Text>
-          {time}
-          <Text color="cyan">[表情] </Text>
-          <Text bold>{userName(event)}</Text>
-          <Text>: {event.body}</Text>
+          <Medal user={event.user} />
+          <User user={event.user} />
+          <Text>: [</Text>
+          <Text color="yellow">{event.uri ? oscLink(event.body, event.uri) : event.body}</Text>
+          <Text>]</Text>
         </Text>
       )
-    case 'gift':
+    case 'gift': {
+      const color = giftColor(event.price)
       return (
         <Text>
-          {time}
-          <Text color="magenta">[礼物] </Text>
-          <Text bold>{userName(event)}</Text>
-          <Text>
-            {' '}
-            送出 {event.giftName} ×{event.num}
-          </Text>
-          {event.price > 0 ? <Text color="yellow"> ¥{event.price}</Text> : null}
+          <Medal user={event.user} />
+          <User user={event.user} />
+          <Text color={color}> [{event.giftName}] × {event.num}</Text>
+          {event.price > 0 ? <Text color={color}>{yuan(event.price)}</Text> : null}
         </Text>
       )
-    case 'guard':
+    }
+    case 'guard': {
+      const color = userColor(event.level)
       return (
         <Text>
-          {time}
-          <Text color="yellow">[舰长] </Text>
-          <Text bold>{userName(event)}</Text>
-          <Text>
-            {' '}
-            开通 {event.roleName} ×{event.num}
-          </Text>
-          {event.price > 0 ? <Text color="yellow"> ¥{event.price}</Text> : null}
+          <Medal user={event.user} />
+          <User user={event.user} />
+          <Text color={color}> [{event.roleName}] × {event.num}</Text>
+          {event.price > 0 ? <Text color={color}>{yuan(event.price)}</Text> : null}
         </Text>
       )
-    case 'superchat':
+    }
+    case 'superchat': {
+      const color = superChatColor(event.price)
       return (
         <Text>
-          {time}
-          <Text color="yellow">[醒目留言] </Text>
-          <Text bold>{userName(event)}</Text>
-          <Text>: {event.body}</Text>
-          <Text color="yellow"> ¥{event.price}</Text>
+          <Medal user={event.user} />
+          <User user={event.user} />
+          <Text color={color} bold> [￥{event.price} {event.body}]</Text>
         </Text>
       )
+    }
     case 'interact':
       return (
         <Text dimColor>
-          {time}[{INTERACT_NAMES[event.msgTypeName] ?? '互动'}] {event.user.name}
+          <User user={event.user} /> [{INTERACT_NAMES[event.msgTypeName] ?? '互动'}]
         </Text>
       )
   }

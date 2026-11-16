@@ -1,11 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { useEffect, useRef, useState } from 'react'
-import { Box, Static, Text, useApp, useInput } from 'ink'
+import { Box, Text, useApp, useInput } from 'ink'
 import { Select } from '@inkjs/ui'
 import TextInput from 'ink-text-input'
 import { Auth } from '../../core/auth.js'
 import { DanmuClient } from '../../core/client.js'
 import { COMMAND_HELP, parseCommand } from '../commands.js'
+import { complete } from '../completions.js'
 import { parseEvent } from '../../core/events.js'
 import type { LiveEvent } from '../../core/events.js'
 import { validateCookie } from '../../core/login.js'
@@ -16,7 +17,8 @@ import { sendDanmu } from '../../core/send.js'
 import { readBrowserBilibiliCookie } from '../browser-cookies.js'
 import type { BrowserName } from '../browser-cookies.js'
 import type { Store } from '../store.js'
-import { timeString, EventLine } from './EventLine.js'
+import { EventLine } from './EventLine.js'
+import { oscLink } from './format.js'
 
 type Tone = 'info' | 'warn' | 'error' | 'success'
 
@@ -45,7 +47,11 @@ const TONE_COLOR: Record<Tone, string> = {
   success: 'green',
 }
 
-export function App({ store, version }: { store: Store; version: string }) {
+const BROWSERS: BrowserName[] = ['chrome', 'edge', 'brave', 'firefox']
+
+const MAX_LOGS = 500
+
+export function App({ store }: { store: Store }) {
   const { exit } = useApp()
   const [self, setSelf] = useState<LoginUser | null>(store.self)
   const [connState, setConnState] = useState<ConnState>('idle')
@@ -56,6 +62,7 @@ export function App({ store, version }: { store: Store; version: string }) {
   const [loginValue, setLoginValue] = useState('')
   const [notice, setNotice] = useState<{ tone: Tone; text: string } | null>(null)
   const [showInteract, setShowInteract] = useState(false)
+  const [rows, setRows] = useState(process.stdout.rows ?? 24)
 
   const logId = useRef(0)
   const clientRef = useRef<DanmuClient | null>(null)
@@ -65,7 +72,10 @@ export function App({ store, version }: { store: Store; version: string }) {
   showInteractRef.current = showInteract
 
   const append = (entry: LogInput): void => {
-    setLogs((prev) => [...prev, { ...entry, id: ++logId.current }])
+    setLogs((prev) => {
+      const next = [...prev, { ...entry, id: ++logId.current }]
+      return next.length > MAX_LOGS ? next.slice(-MAX_LOGS) : next
+    })
   }
 
   const stopClient = (): void => {
@@ -75,9 +85,35 @@ export function App({ store, version }: { store: Store; version: string }) {
   }
 
   useEffect(() => {
+    append({ kind: 'system', text: '欢迎使用 bili-danmu' })
+    append({
+      kind: 'system',
+      text: '/connect [房间号] 连接直播间 · /login 登录 · /help 查看全部命令',
+    })
+    append({ kind: 'system', text: 'Tab 补全命令与历史房间号' })
+  }, [])
+
+  useEffect(() => {
     return () => {
       generation.current++
       stopClient()
+    }
+  }, [])
+
+  useEffect(() => {
+    const onResize = (): void => {
+      const columns = process.stdout.columns ?? 80
+      const nextRows = process.stdout.rows ?? 24
+      // 旧帧按调整前的宽度排版，直接重绘会留下错位残影，先清屏再强制重绘
+      process.stdout.write('\x1b[2J\x1b[H')
+      setRows(nextRows)
+      const text = `终端已调整为 ${columns}×${nextRows}`
+      setNotice({ tone: 'info', text })
+      setTimeout(() => setNotice((prev) => (prev?.text === text ? null : prev)), 1500)
+    }
+    process.stdout.on('resize', onResize)
+    return () => {
+      process.stdout.off('resize', onResize)
     }
   }, [])
 
@@ -268,6 +304,52 @@ export function App({ store, version }: { store: Store; version: string }) {
     exit()
   }
 
+  const applyCompletion = (base: string): boolean => {
+    const result = complete(base, store.rooms().map((item) => item.roomId))
+    if (!result) {
+      return false
+    }
+    setInput(result.value)
+    setNotice(
+      result.options.length > 1
+        ? { tone: 'info', text: `补全: ${result.options.join('  ')}` }
+        : null,
+    )
+    return true
+  }
+
+  const handleChatChange = (value: string): void => {
+    if (value.endsWith('\t')) {
+      const base = value.slice(0, -1)
+      if (!applyCompletion(base)) {
+        setInput(base)
+        setNotice({ tone: 'warn', text: '没有匹配的补全项' })
+      }
+      return
+    }
+    setInput(value)
+  }
+
+  const handleLoginChange = (value: string): void => {
+    if (!value.endsWith('\t')) {
+      setLoginValue(value)
+      return
+    }
+    const base = value.slice(0, -1).toLowerCase()
+    const matches = BROWSERS.filter((name) => name.startsWith(base))
+    if (matches.length === 1) {
+      setLoginValue(matches[0])
+      setNotice(null)
+    } else {
+      setLoginValue(base)
+      setNotice(
+        matches.length > 1
+          ? { tone: 'info', text: `补全: ${matches.join('  ')}` }
+          : { tone: 'warn', text: '没有匹配的浏览器名，也可以直接粘贴 Cookie' },
+      )
+    }
+  }
+
   const handleSubmit = (raw: string): void => {
     const command = parseCommand(raw)
     setInput('')
@@ -342,60 +424,39 @@ export function App({ store, version }: { store: Store; version: string }) {
   })
 
   const status = STATUS[connState]
+  const roomLabel = room
+    ? `${oscLink(String(room.roomId), `https://live.bilibili.com/${room.roomId}`)}${room.owner ? ` ${room.owner}` : ''}`
+    : ''
   const historyOptions = store.rooms().map((item) => ({
     label: `${item.roomId} ${item.owner ?? item.title ?? ''} · ${item.visits} 次 · ${shortTime(item.lastConnectedAt)}`,
     value: String(item.roomId),
   }))
   historyOptions.push({ label: '输入其他房间号…', value: '__manual__' })
 
+  const visibleLogs = logs.slice(-Math.max(4, rows - 6))
+
   return (
-    <Box flexDirection="column">
-      <Box flexDirection="column" borderStyle="round" borderColor={connState === 'connected' ? 'green' : 'gray'} paddingX={1}>
-        <Box justifyContent="space-between">
-          <Text bold color="cyan">
-            bili-danmu
-          </Text>
-          <Text>
-            <Text color={status.color}>{status.dot}</Text>
-            <Text> {status.text}</Text>
-            {room ? (
-              <Text dimColor>
-                {' '}
-                · {room.roomId}
-                {room.owner ? ` ${room.owner}` : ''}
-              </Text>
-            ) : null}
-          </Text>
-        </Box>
-        <Text dimColor>
-          v{version} · {self ? `已登录 ${self.name}` : '未登录（发送弹幕前 /login）'}
-        </Text>
-      </Box>
-
-      <Static items={logs}>
-        {(entry) => <LogLine key={entry.id} entry={entry} />}
-      </Static>
-
-      <Box height={1}>
-        {notice ? <Text color={TONE_COLOR[notice.tone]}>{notice.text}</Text> : <Text> </Text>}
+    <Box flexDirection="column" paddingX={1}>
+      <Box flexDirection="column">
+        {visibleLogs.map((entry) => (
+          <LogLine key={entry.id} entry={entry} />
+        ))}
       </Box>
 
       <Box height={1}>
-        {mode === 'chat' ? (
-          <Text dimColor>/connect /history /close /status /login /interact /help /quit</Text>
-        ) : mode === 'history' ? (
-          <Text dimColor>↑↓ 选择 · Enter 连接 · Esc 返回</Text>
-        ) : mode === 'login' ? (
-          <Text dimColor>粘贴 Cookie 或输入浏览器名（{BROWSERS.join(' / ')}） · Enter 校验 · Esc 取消</Text>
+        {notice ? (
+          <Text color={TONE_COLOR[notice.tone]} wrap="truncate-end">
+            {notice.text}
+          </Text>
         ) : (
-          <Text dimColor>输入房间号 · Enter 连接 · Esc 取消</Text>
+          <Text> </Text>
         )}
       </Box>
 
       {mode === 'history' ? (
         <Select
           options={historyOptions}
-          visibleOptionCount={Math.min(9, historyOptions.length)}
+          visibleOptionCount={Math.min(9, historyOptions.length, Math.max(3, rows - 8))}
           onChange={(value) => {
             if (value === '__manual__') {
               setMode('room')
@@ -410,9 +471,9 @@ export function App({ store, version }: { store: Store; version: string }) {
           <Text color="cyan">Cookie ❯ </Text>
           <TextInput
             value={loginValue}
-            onChange={setLoginValue}
+            onChange={handleLoginChange}
             onSubmit={() => void submitLogin()}
-            placeholder="SESSDATA=...; bili_jct=...; DedeUserID=..."
+            placeholder="粘贴 Cookie，或输入 chrome / edge / brave / firefox"
             mask="*"
           />
         </Box>
@@ -421,7 +482,7 @@ export function App({ store, version }: { store: Store; version: string }) {
           <Text color="cyan">房间号 ❯ </Text>
           <TextInput
             value={input}
-            onChange={setInput}
+            onChange={(value) => setInput(value.replace(/\t/g, ''))}
             onSubmit={(value) => {
               setInput('')
               setMode('chat')
@@ -429,7 +490,7 @@ export function App({ store, version }: { store: Store; version: string }) {
                 void connectTo(value.trim())
               }
             }}
-            placeholder="例如 545068"
+            placeholder="例如 22603245"
           />
         </Box>
       ) : (
@@ -437,7 +498,7 @@ export function App({ store, version }: { store: Store; version: string }) {
           <Text color={connState === 'connected' ? 'green' : 'gray'}>❯ </Text>
           <TextInput
             value={input}
-            onChange={setInput}
+            onChange={handleChatChange}
             onSubmit={handleSubmit}
             placeholder={
               connState === 'connected' ? '输入弹幕，Enter 发送' : '输入 /connect 房间号 连接直播间'
@@ -445,6 +506,27 @@ export function App({ store, version }: { store: Store; version: string }) {
           />
         </Box>
       )}
+
+      <Box height={1}>
+        <Text dimColor wrap="truncate-end">
+          {status.dot} {status.text}
+          {roomLabel ? ` ${roomLabel}` : ''} · {self ? `已登录 ${self.name}` : '未登录'}
+        </Text>
+      </Box>
+
+      <Box height={1}>
+        <Text dimColor wrap="truncate-end">
+          {mode === 'history'
+            ? '↑↓ 选择 · Enter 连接 · Esc 返回'
+            : mode === 'login'
+              ? `Tab 补全浏览器名 · Enter 校验 · Esc 取消`
+              : mode === 'room'
+                ? '输入房间号 · Enter 连接 · Esc 取消'
+                : connState === 'connected'
+                  ? 'Enter 发送 · Tab 补全 · /help 命令 · /close 断开'
+                  : 'Tab 补全 · /history 连接历史 · /login 登录 · /help 命令'}
+        </Text>
+      </Box>
     </Box>
   )
 }
@@ -456,8 +538,7 @@ function LogLine({ entry }: { entry: LogEntry }) {
   if (entry.kind === 'self') {
     return (
       <Text>
-        <Text dimColor>{timeString()} </Text>
-        <Text color="green">[我] </Text>
+        <Text color="green">我: </Text>
         <Text>{entry.text}</Text>
       </Text>
     )
@@ -468,8 +549,6 @@ function LogLine({ entry }: { entry: LogEntry }) {
     </Text>
   )
 }
-
-const BROWSERS: BrowserName[] = ['chrome', 'edge', 'brave', 'firefox']
 
 function browserName(input: string): BrowserName | undefined {
   const lower = input.trim().toLowerCase()

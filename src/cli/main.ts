@@ -11,6 +11,13 @@ import type { LiveEvent } from '../core/events.js'
 import { resolveRoomId } from '../core/room.js'
 import { sendDanmu } from '../core/send.js'
 import { Store } from './store.js'
+import {
+  giftColor,
+  medalColor,
+  oscLink,
+  superChatColor,
+  userColor,
+} from './tui/format.js'
 
 interface CookieOptions {
   cookieFile?: string
@@ -69,7 +76,7 @@ async function startTui(): Promise<void> {
     import('react'),
     import('./tui/App.js'),
   ])
-  const app = render(createElement(App, { store: new Store(), version: pkg.version }))
+  const app = render(createElement(App, { store: new Store() }))
   await app.waitUntilExit()
 }
 
@@ -139,37 +146,71 @@ async function loadCookie(file: string | undefined, required: boolean): Promise<
   return cookie
 }
 
+const INTERACT_NAMES: Record<string, string> = {
+  ENTER: '进入直播间',
+  FOLLOW: '关注了主播',
+  SHARE: '分享了直播间',
+  SPECIAL_FOLLOW: '特别关注了主播',
+  MUTUAL_FOLLOW: '互粉了主播',
+}
+
+const PAINT: Record<string, (text: string) => string> = {
+  gray: pc.gray,
+  blue: pc.blue,
+  magenta: pc.magenta,
+  yellow: pc.yellow,
+  green: pc.green,
+  cyan: pc.cyan,
+  red: pc.red,
+  white: pc.white,
+  yellowBright: pc.yellowBright,
+  cyanBright: pc.cyanBright,
+  magentaBright: pc.magentaBright,
+  redBright: pc.redBright,
+}
+
+function paint(color: string, text: string): string {
+  return (PAINT[color] ?? ((value: string) => value))(text)
+}
+
+function link(text: string, url: string): string {
+  return process.stdout.isTTY && url ? oscLink(text, url) : text
+}
+
 function formatEvent(event: LiveEvent): string {
   const time = pc.dim(new Date().toLocaleTimeString('zh-CN', { hour12: false }))
   switch (event.type) {
     case 'danmu':
-      return `${time} ${pc.cyan('[弹幕]')} ${withMedal(event)}${event.body}`
+      return `${time} ${who(event.user)}: ${event.body}`
     case 'emoji':
-      return `${time} ${pc.cyan('[表情]')} ${withMedal(event)}${event.body}`
-    case 'gift':
-      return `${time} ${pc.magenta('[礼物]')} ${withMedal(event)} ${event.giftName} ×${event.num}${money(event.price)}`
-    case 'guard':
-      return `${time} ${pc.yellow('[舰长]')} ${withMedal(event)} ${event.roleName} ×${event.num}${money(event.price)}`
-    case 'superchat':
-      return `${time} ${pc.yellow('[醒目留言]')} ${withMedal(event)} ${event.body}${money(event.price)}（${event.time}s）`
+      return `${time} ${who(event.user)}: [${link(event.body, event.uri)}]`
+    case 'gift': {
+      const color = giftColor(event.price)
+      return `${time} ${who(event.user)} ${paint(color, `[${event.giftName}] × ${event.num}`)}${money(event.price, color)}`
+    }
+    case 'guard': {
+      const color = userColor(event.level)
+      return `${time} ${who(event.user)} ${paint(color, `[${event.roleName}] × ${event.num}`)}${money(event.price, color)}`
+    }
+    case 'superchat': {
+      const color = superChatColor(event.price)
+      return `${time} ${who(event.user)} ${pc.bold(paint(color, `[￥${event.price} ${event.body}]`))}`
+    }
     case 'interact':
-      return `${time} ${pc.dim('[互动]')} ${event.msgTypeName} ${event.user.name}`
+      return `${time} ${pc.dim(`${event.user.name} [${INTERACT_NAMES[event.msgTypeName] ?? '互动'}]`)}`
   }
 }
 
-function withMedal(event: Exclude<LiveEvent, { type: 'interact' }>): string {
-  const parts = [pc.bold(event.user.name)]
-  if (event.user.fansMedal) {
-    parts.push(pc.dim(`[${event.user.fansMedal.name} ${event.user.fansMedal.level}]`))
-  }
-  if (event.user.guardLevel > 0) {
-    parts.push(pc.dim(`(${event.user.guardLevel})`))
-  }
-  return `${parts.join(' ')}: `
+function who(user: LiveEvent['user']): string {
+  const medal = user.fansMedal
+    ? paint(medalColor(user.fansMedal.level), `[${user.fansMedal.name}|${user.fansMedal.level}]`)
+    : ''
+  const name = paint(userColor(user.guardLevel), pc.bold(link(user.name, `https://space.bilibili.com/${user.uid}`)))
+  return `${medal}${name}`
 }
 
-function money(price: number): string {
-  return price > 0 ? pc.yellow(` ¥${price.toFixed(price % 1 === 0 ? 0 : 2)}`) : ''
+function money(price: number, color: string): string {
+  return price > 0 ? paint(color, ` ￥${price.toFixed(price % 1 === 0 ? 0 : 2)}`) : ''
 }
 
 program.parseAsync(process.argv).catch((error: unknown) => {
