@@ -21,6 +21,7 @@ describe('App', () => {
     expect(frame).toContain('欢迎使用 bili-danmu')
     expect(frame).toContain('未登录')
     expect(frame).toContain('输入 /connect 房间号 连接直播间')
+    expect(frame).not.toContain('Tab 补全命令与历史房间号')
     expect(frame).not.toContain('v0.1.0')
 
     unmount()
@@ -115,13 +116,13 @@ describe('App', () => {
 
     stdin.write('\u000F')
     await delay()
-    expect(frames.join('')).toContain('互动消息已显示')
     expect(lastFrame()).toContain('隐藏互动消息')
+    expect(frames.join('')).not.toContain('互动消息已显示')
 
     stdin.write('\u000F')
     await delay()
-    expect(frames.join('')).toContain('互动消息已隐藏')
     expect(lastFrame()).toContain('显示互动消息')
+    expect(frames.join('')).not.toContain('互动消息已隐藏')
 
     unmount()
   })

@@ -92,7 +92,6 @@ export function App({ store }: { store: Store }) {
       kind: 'system',
       text: '/connect [房间号] 连接直播间 · /login 登录 · /help 查看全部命令',
     })
-    append({ kind: 'system', text: 'Tab 补全命令与历史房间号' })
   }, [])
 
   useEffect(() => {
@@ -353,7 +352,6 @@ export function App({ store }: { store: Store }) {
     const next = !showInteractRef.current
     showInteractRef.current = next
     setShowInteract(next)
-    append({ kind: 'system', text: `互动消息已${next ? '显示' : '隐藏'}` })
   }
 
   const openHistory = (): void => {
