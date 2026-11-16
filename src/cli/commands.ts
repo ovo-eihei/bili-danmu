@@ -21,7 +21,7 @@ export const COMMAND_HELP = [
   '/history           查看最近连接过的直播间',
   '/close             断开当前直播间',
   '/status            查看连接与登录状态',
-  '/login [来源]      登录：回车后粘贴 Cookie，或跟浏览器名（chrome/edge/brave/firefox）、Cookie 文件路径',
+  '/login [来源]      登录：选择已安装的浏览器（Chromium 系通过 CDP 读取），或粘贴 Cookie、给 Cookie 文件路径',
   '/logout            清除本地登录状态',
   '/interact          显示/隐藏进场、关注等互动消息',
   '/help              显示帮助',

@@ -1,7 +1,8 @@
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { useEffect, useRef, useState } from 'react'
 import { Box, Text, useApp, useInput } from 'ink'
-import { Select } from '@inkjs/ui'
+import { ConfirmInput, Select } from '@inkjs/ui'
 import TextInput from 'ink-text-input'
 import { Auth } from '../../core/auth.js'
 import { DanmuClient } from '../../core/client.js'
@@ -15,8 +16,8 @@ import type { LoginUser } from '../../core/login.js'
 import { getRoomInfo, resolveRoomId } from '../../core/room.js'
 import type { RoomInfo } from '../../core/room.js'
 import { sendDanmu } from '../../core/send.js'
-import { readBrowserBilibiliCookie } from '../browser-cookies.js'
-import type { BrowserName } from '../browser-cookies.js'
+import { browserLabel, browserName, closeBrowser, detectBrowsers, isBrowserRunning, readBrowserBilibiliCookie } from '../browser-cookies.js'
+import type { BrowserName, DetectedBrowser } from '../browser-cookies.js'
 import type { Store } from '../store.js'
 import { EventLine } from './EventLine.js'
 import { oscLink } from './format.js'
@@ -30,6 +31,8 @@ type LogInput =
 type LogEntry = LogInput & { id: number }
 
 type Mode = 'chat' | 'history' | 'room' | 'login'
+
+type LoginStage = 'select' | 'paste' | 'confirm'
 
 type ConnState = 'idle' | 'connecting' | 'connected' | 'disconnected'
 
@@ -47,8 +50,6 @@ const TONE_COLOR: Record<Tone, string> = {
   success: 'green',
 }
 
-const BROWSERS: BrowserName[] = ['chrome', 'edge', 'brave', 'firefox']
-
 const MAX_LOGS = 500
 
 export function App({ store }: { store: Store }) {
@@ -60,6 +61,9 @@ export function App({ store }: { store: Store }) {
   const [mode, setMode] = useState<Mode>('chat')
   const [input, setInput] = useState('')
   const [loginValue, setLoginValue] = useState('')
+  const [loginStage, setLoginStage] = useState<LoginStage>('select')
+  const [browserOptions, setBrowserOptions] = useState<DetectedBrowser[]>([])
+  const [pendingBrowser, setPendingBrowser] = useState<BrowserName | null>(null)
   const [notice, setNotice] = useState<{ tone: Tone; text: string } | null>(null)
   const [showInteract, setShowInteract] = useState(false)
   const [rows, setRows] = useState(process.stdout.rows ?? 24)
@@ -71,6 +75,7 @@ export function App({ store }: { store: Store }) {
   const clientRef = useRef<DanmuClient | null>(null)
   const generation = useRef(0)
   const connecting = useRef(false)
+  const loginBusy = useRef(false)
   const showInteractRef = useRef(showInteract)
   showInteractRef.current = showInteract
   const logCount = useRef(0)
@@ -249,35 +254,125 @@ export function App({ store }: { store: Store }) {
     }
   }
 
+  const completeLogin = async (cookie: string, from: string): Promise<void> => {
+    setNotice({ tone: 'info', text: '正在校验登录状态…' })
+    const user = await validateCookie(cookie)
+    store.setLogin(cookie, user)
+    setSelf(user)
+    setLoginValue('')
+    setMode('chat')
+    setLoginStage('select')
+    setPendingBrowser(null)
+    setNotice({ tone: 'success', text: `已登录 ${user.name}${from}` })
+    append({ kind: 'system', text: `已登录 ${user.name} (@${user.uid})` })
+  }
+
   const submitLogin = async (source?: string): Promise<void> => {
     try {
-      let cookie: string
-      let from = ''
-      const browser = browserName(source ?? loginValue)
-      if (browser) {
-        setNotice({ tone: 'info', text: `正在读取 ${browser} 的 Cookie…` })
-        const result = await readBrowserBilibiliCookie(browser)
-        cookie = result.cookie
-        from = ` · 来自 ${result.browser}（${result.profile}）`
-      } else if (source) {
-        cookie = normalizeCookie(await readFile(source, 'utf8'))
-      } else {
-        cookie = normalizeCookie(loginValue)
-      }
+      const singleLine = loginValue.trim()
+      const cookie = source
+        ? normalizeCookie(await readFile(source, 'utf8'))
+        : singleLine && existsSync(singleLine)
+          ? normalizeCookie(await readFile(singleLine, 'utf8'))
+          : normalizeCookie(loginValue)
       if (!cookie) {
         return
       }
-      setNotice({ tone: 'info', text: '正在校验登录状态…' })
-      const user = await validateCookie(cookie)
-      store.setLogin(cookie, user)
-      setSelf(user)
-      setLoginValue('')
-      setMode('chat')
-      setNotice({ tone: 'success', text: `已登录 ${user.name}${from}` })
-      append({ kind: 'system', text: `已登录 ${user.name} (@${user.uid})` })
+      await completeLogin(cookie, '')
     } catch (error) {
       setNotice({ tone: 'error', text: `登录失败: ${errorText(error)}` })
     }
+  }
+
+  const runBrowserLogin = async (browser: BrowserName): Promise<void> => {
+    const label = browserLabel(browser)
+    setNotice({ tone: 'info', text: `正在通过 ${label} 读取 Cookie…` })
+    try {
+      const result = await readBrowserBilibiliCookie(browser)
+      await completeLogin(result.cookie, ` · 来自 ${label}（${result.profile}）`)
+    } catch (error) {
+      setNotice({ tone: 'error', text: `登录失败: ${errorText(error)}` })
+      setLoginStage(browserOptions.length > 0 ? 'select' : 'paste')
+    }
+  }
+
+  const loginWithBrowser = async (browser: BrowserName): Promise<void> => {
+    if (loginBusy.current) {
+      return
+    }
+    loginBusy.current = true
+    try {
+      const label = browserLabel(browser)
+      setNotice({ tone: 'info', text: `正在检查 ${label} 是否在运行…` })
+      if (await isBrowserRunning(browser)) {
+        setPendingBrowser(browser)
+        setLoginStage('confirm')
+        setNotice({
+          tone: 'warn',
+          text: `${label} 正在运行，读取 Cookie 需要先关闭；确认后会关闭所有 ${label} 窗口（必要时强制结束）`,
+        })
+        return
+      }
+      setPendingBrowser(null)
+      await runBrowserLogin(browser)
+    } finally {
+      loginBusy.current = false
+    }
+  }
+
+  const confirmCloseBrowser = async (): Promise<void> => {
+    const browser = pendingBrowser
+    if (!browser || loginBusy.current) {
+      return
+    }
+    loginBusy.current = true
+    try {
+      const label = browserLabel(browser)
+      setNotice({ tone: 'info', text: `正在关闭 ${label}…` })
+      if (!(await closeBrowser(browser))) {
+        setNotice({ tone: 'error', text: `${label} 没有退出，请手动关闭窗口后重新选择` })
+        setPendingBrowser(null)
+        setLoginStage(browserOptions.length > 0 ? 'select' : 'paste')
+        return
+      }
+      await runBrowserLogin(browser)
+    } finally {
+      loginBusy.current = false
+    }
+  }
+
+  const cancelCloseBrowser = (): void => {
+    setPendingBrowser(null)
+    setLoginStage(browserOptions.length > 0 ? 'select' : 'paste')
+    setNotice({ tone: 'info', text: '已取消，未关闭浏览器' })
+  }
+
+  const openLogin = (source?: string): void => {
+    if (source) {
+      const browser = browserName(source)
+      if (browser) {
+        void loginWithBrowser(browser)
+        return
+      }
+      void submitLogin(source)
+      return
+    }
+
+    setLoginValue('')
+    setPendingBrowser(null)
+    let detected: DetectedBrowser[] = []
+    try {
+      detected = detectBrowsers()
+    } catch {
+      detected = []
+    }
+    setBrowserOptions(detected)
+    setLoginStage(detected.length > 0 ? 'select' : 'paste')
+    setMode('login')
+    setNotice({
+      tone: 'info',
+      text: detected.length > 0 ? '选择登录来源' : '粘贴 Cookie，或输入 Cookie 文件路径',
+    })
   }
 
   const logout = (): void => {
@@ -340,26 +435,6 @@ export function App({ store }: { store: Store }) {
     setMenuHidden(false)
   }
 
-  const handleLoginChange = (value: string): void => {
-    if (!value.endsWith('\t')) {
-      setLoginValue(value)
-      return
-    }
-    const base = value.slice(0, -1).toLowerCase()
-    const matches = BROWSERS.filter((name) => name.startsWith(base))
-    if (matches.length === 1) {
-      setLoginValue(matches[0])
-      setNotice(null)
-    } else {
-      setLoginValue(base)
-      setNotice(
-        matches.length > 1
-          ? { tone: 'info', text: `补全: ${matches.join('  ')}` }
-          : { tone: 'warn', text: '没有匹配的浏览器名，也可以直接粘贴 Cookie' },
-      )
-    }
-  }
-
   const handleSubmit = (raw: string): void => {
     const items = suggest(raw, store.rooms())
     if (!menuHidden && items.length > 0) {
@@ -399,13 +474,7 @@ export function App({ store }: { store: Store }) {
         showStatus()
         break
       case 'login':
-        if (command.source) {
-          void submitLogin(command.source)
-        } else {
-          setLoginValue('')
-          setMode('login')
-          setNotice({ tone: 'info', text: '粘贴完整 Cookie，或输入浏览器名直接读取（如 chrome）' })
-        }
+        openLogin(command.source)
         break
       case 'logout':
         logout()
@@ -431,8 +500,20 @@ export function App({ store }: { store: Store }) {
   }
 
   const chatMenu = mode === 'chat' && !menuHidden ? suggest(input, store.rooms()) : []
+  const overlayLines =
+    mode === 'chat'
+      ? chatMenu.length
+      : mode === 'login'
+        ? loginStage === 'select'
+          ? Math.min(6, browserOptions.length + 2)
+          : loginStage === 'confirm'
+            ? 2
+            : 0
+        : mode === 'history'
+          ? Math.min(9, store.rooms().length + 1)
+          : 0
   const activeSuggestion = Math.min(suggestionIndex, Math.max(0, chatMenu.length - 1))
-  const logHeight = Math.max(4, rows - 5 - chatMenu.length)
+  const logHeight = Math.max(3, rows - 5 - overlayLines)
   const maxScroll = Math.max(0, logs.length - logHeight)
   const scrollOffset = Math.min(scroll, maxScroll)
   const logEnd = Math.max(0, logs.length - scrollOffset)
@@ -476,6 +557,8 @@ export function App({ store }: { store: Store }) {
       if (mode !== 'chat') {
         setMode('chat')
         setLoginValue('')
+        setLoginStage('select')
+        setPendingBrowser(null)
       }
       setNotice(null)
     }
@@ -491,6 +574,15 @@ export function App({ store }: { store: Store }) {
     value: String(item.roomId),
   }))
   historyOptions.push({ label: '输入其他房间号…', value: '__manual__' })
+
+  const loginOptions = [
+    ...browserOptions.map((browser) => ({
+      label: `${browser.label}（读取 Cookie）`,
+      value: browser.name,
+    })),
+    { label: '粘贴 Cookie 或输入文件路径', value: '__paste__' },
+    { label: '取消', value: '__cancel__' },
+  ]
 
   return (
     <Box flexDirection="column" paddingX={1}>
@@ -524,16 +616,52 @@ export function App({ store }: { store: Store }) {
           }}
         />
       ) : mode === 'login' ? (
-        <Box>
-          <Text color="cyan">Cookie ❯ </Text>
-          <TextInput
-            value={loginValue}
-            onChange={handleLoginChange}
-            onSubmit={() => void submitLogin()}
-            placeholder="粘贴 Cookie，或输入 chrome / edge / brave / firefox"
-            mask="*"
+        loginStage === 'select' ? (
+          <Select
+            options={loginOptions}
+            visibleOptionCount={Math.min(6, loginOptions.length)}
+            onChange={(value) => {
+              if (value === '__paste__') {
+                setLoginStage('paste')
+                setNotice({ tone: 'info', text: '粘贴 Cookie，或输入 Cookie 文件路径' })
+                return
+              }
+              if (value === '__cancel__') {
+                setMode('chat')
+                setNotice(null)
+                return
+              }
+              void loginWithBrowser(value as BrowserName)
+            }}
           />
-        </Box>
+        ) : loginStage === 'confirm' && pendingBrowser ? (
+          <Box flexDirection="column">
+            <Text color="yellow">
+              关闭 {browserLabel(pendingBrowser)} 并继续？未保存的页面可能丢失。
+            </Text>
+            <Box>
+              <Text>关闭后继续 </Text>
+              <ConfirmInput
+                defaultChoice="cancel"
+                submitOnEnter={false}
+                onConfirm={() => void confirmCloseBrowser()}
+                onCancel={cancelCloseBrowser}
+              />
+              <Text dimColor>（y 关闭 · n 取消）</Text>
+            </Box>
+          </Box>
+        ) : (
+          <Box>
+            <Text color="cyan">Cookie ❯ </Text>
+            <TextInput
+              value={loginValue}
+              onChange={setLoginValue}
+              onSubmit={() => void submitLogin()}
+              placeholder="粘贴 Cookie，或输入 Cookie 文件路径"
+              mask="*"
+            />
+          </Box>
+        )
       ) : mode === 'room' ? (
         <Box>
           <Text color="cyan">房间号 ❯ </Text>
@@ -593,7 +721,11 @@ export function App({ store }: { store: Store }) {
           {mode === 'history'
             ? '↑↓ 选择 · Enter 连接 · Esc 返回'
             : mode === 'login'
-              ? 'Tab 补全浏览器名 · Enter 校验 · Esc 取消'
+              ? loginStage === 'select'
+                ? '↑↓ 选择 · Enter 确认 · Esc 取消'
+                : loginStage === 'confirm'
+                  ? 'y 关闭并继续 · n 取消'
+                  : 'Enter 校验 · Esc 取消'
               : mode === 'room'
                 ? '输入房间号 · Enter 连接 · Esc 取消'
                 : scrollOffset > 0
@@ -618,11 +750,6 @@ function LogLine({ entry, selfUid }: { entry: LogEntry; selfUid?: string }) {
       · {entry.text}
     </Text>
   )
-}
-
-function browserName(input: string): BrowserName | undefined {
-  const lower = input.trim().toLowerCase()
-  return BROWSERS.find((name) => name === lower)
 }
 
 function normalizeCookie(raw: string): string {

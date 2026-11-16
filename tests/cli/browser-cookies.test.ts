@@ -1,51 +1,51 @@
-import { createCipheriv, createHash, randomBytes } from 'node:crypto'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { decryptChromiumValue, readBrowserBilibiliCookie } from '../../src/cli/browser-cookies.js'
+import {
+  browserLabel,
+  browserName,
+  detectBrowsers,
+  readBrowserBilibiliCookie,
+} from '../../src/cli/browser-cookies.js'
 
-const key = randomBytes(32)
+describe('browserName / browserLabel', () => {
+  it('识别浏览器名', () => {
+    expect(browserName('Chrome')).toBe('chrome')
+    expect(browserName(' firefox ')).toBe('firefox')
+    expect(browserName('safari')).toBeUndefined()
+    expect(browserLabel('edge')).toBe('Edge')
+  })
+})
 
-function encrypt(value: string, host: string, withDigest = true): Buffer {
-  const nonce = randomBytes(12)
-  const plaintext = withDigest
-    ? Buffer.concat([Buffer.from(value, 'utf8'), createHash('sha256').update(host).digest()])
-    : Buffer.from(value, 'utf8')
-  const cipher = createCipheriv('aes-256-gcm', key, nonce)
-  const data = Buffer.concat([cipher.update(plaintext), cipher.final()])
-  return Buffer.concat([Buffer.from('v10'), nonce, data, cipher.getAuthTag()])
-}
+describe.runIf(process.platform === 'win32')('detectBrowsers', () => {
+  let dir: string | undefined
 
-describe('decryptChromiumValue', () => {
-  it('解密并去掉 host 摘要', () => {
-    const encrypted = encrypt('abc123', '.bilibili.com')
-    expect(decryptChromiumValue(encrypted, key, '.bilibili.com')).toBe('abc123')
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    if (dir) {
+      rmSync(dir, { recursive: true, force: true })
+      dir = undefined
+    }
   })
 
-  it('兼容没有摘要后缀的老数据', () => {
-    const encrypted = encrypt('abc123', '.bilibili.com', false)
-    expect(decryptChromiumValue(encrypted, key, '.bilibili.com')).toBe('abc123')
-  })
+  it('列出已安装的浏览器', () => {
+    dir = mkdtempSync(join(tmpdir(), 'bili-danmu-detect-'))
+    const local = join(dir, 'Local')
+    const programFiles = join(dir, 'Program Files')
+    const programFilesX86 = join(dir, 'Program Files (x86)')
+    vi.stubEnv('LOCALAPPDATA', local)
+    vi.stubEnv('PROGRAMFILES', programFiles)
+    vi.stubEnv('PROGRAMFILES(X86)', programFilesX86)
+    vi.stubEnv('APPDATA', join(dir, 'Roaming'))
 
-  it('空值返回空串', () => {
-    expect(decryptChromiumValue(Buffer.alloc(0), key, '.bilibili.com')).toBe('')
-  })
+    mkdirSync(join(local, 'Google', 'Chrome', 'User Data'), { recursive: true })
+    const edge = join(programFilesX86, 'Microsoft', 'Edge', 'Application', 'msedge.exe')
+    mkdirSync(join(programFilesX86, 'Microsoft', 'Edge', 'Application'), { recursive: true })
+    writeFileSync(edge, '')
 
-  it('应用绑定加密给出明确提示', () => {
-    const abe = Buffer.concat([Buffer.from('v20'), randomBytes(48)])
-    expect(() => decryptChromiumValue(abe, key, '.bilibili.com')).toThrow(/应用绑定加密/)
-  })
-
-  it('未知格式直接报错', () => {
-    const odd = Buffer.concat([Buffer.from('zzz'), randomBytes(48)])
-    expect(() => decryptChromiumValue(odd, key, '.bilibili.com')).toThrow(/未知的 Cookie 加密格式/)
-  })
-
-  it('密钥不对时报解密失败', () => {
-    const encrypted = encrypt('abc123', '.bilibili.com')
-    expect(() => decryptChromiumValue(encrypted, randomBytes(32), '.bilibili.com')).toThrow(/解密失败/)
+    expect(detectBrowsers().map((browser) => browser.label)).toEqual(['Chrome', 'Edge'])
   })
 })
 

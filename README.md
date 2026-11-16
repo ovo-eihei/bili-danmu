@@ -44,7 +44,7 @@ bili-danmu
 Enter 发送 · Tab 补全 · /help 命令 · /close 断开
 ```
 
-1. `/login` 回车后粘贴浏览器里的 Cookie（输入内容以 `*` 显示）；也可以 `/login ./cookie.txt` 读文件，或 `/login chrome|edge|brave|firefox` 直接读本机浏览器
+1. `/login` 选择登录方式：自动列出本机已安装的 Chrome/Edge/Brave/Firefox。Chromium 系通过 CDP 读取，浏览器运行时会先确认再关闭；Firefox 直接读、不用关。也可以选粘贴 Cookie（输入以 `*` 显示）或输入 Cookie 文件路径；`/login ./cookie.txt`、`/login chrome` 这类快捷写法仍可用
 2. `/connect 22603245` 连接永雏塔菲的直播间，不带房间号时从连接历史里选
 3. 直接输入文字回车即发送弹幕；`/close` 断开
 
@@ -60,7 +60,7 @@ Enter 发送 · Tab 补全 · /help 命令 · /close 断开
 | `/history` | 最近连接过的直播间，按访问次数与时间排序 |
 | `/close` | 断开当前直播间 |
 | `/status` | 查看连接、登录与历史状态 |
-| `/login [来源]` | 登录；来源可省略（粘贴 Cookie）、写浏览器名（chrome/edge/brave/firefox）或 Cookie 文件路径 |
+| `/login [来源]` | 登录；省略时选择已安装的浏览器或在界面里粘贴 Cookie，也可给浏览器名、Cookie 文件路径 |
 | `/logout` | 清除本地保存的登录状态 |
 | `/interact` | 显示/隐藏进场、关注、分享等互动消息（默认隐藏） |
 | `/help` | 命令列表 |
@@ -68,7 +68,7 @@ Enter 发送 · Tab 补全 · /help 命令 · /close 断开
 
 已连接时输入框提示「输入弹幕，Enter 发送」；未登录时发送会提示先登录。发送失败会把内容留在输入框里。
 
-读浏览器 Cookie 的边界：Firefox 可直接读取；Chromium 系（Chrome/Edge/Brave）需要先关掉浏览器（运行时会独占 Cookie 数据库），且 Chrome/Edge 127+ 的应用绑定加密（`v20`）无法从外部解密，遇到时会提示改用手动粘贴。
+读浏览器 Cookie 的方式：Chromium 系（Chrome/Edge/Brave）把当前配置的 Cookie 数据库和 `Local State` 复制到临时配置档，用无头浏览器打开后通过 CDP 让浏览器自行解密，因此支持 Chrome/Edge 127+ 的应用绑定加密（`v20`）。读取前必须先退出浏览器：界面会先询问，确认后关闭该浏览器的所有窗口（正常退出失败时会强制结束，未保存的页面可能丢失，重启后可恢复标签页）。临时配置档在读取完成后删除。Firefox 直接读 `cookies.sqlite`，运行时也能读。
 
 ## 本地存储
 
